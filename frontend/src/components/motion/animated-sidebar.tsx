@@ -11,8 +11,8 @@ import {
 } from "motion/react"
 import {
   type ButtonHTMLAttributes,
-  type CSSProperties,
   createContext,
+  type CSSProperties,
   forwardRef,
   type HTMLAttributes,
   type ReactNode,
@@ -560,13 +560,13 @@ export const AnimatedSidebar = forwardRef<HTMLElement, AnimatedSidebarProps>(
           transition={context.reduce ? REDUCED_TRANSITION : PANEL_TRANSITION}
           className={cn(
             "sticky top-0 flex h-svh w-full flex-col overflow-hidden bg-background",
-            collapsible === "offcanvas" && "w-[var(--sidebar-width)]",
+            collapsible === "offcanvas" && "w-(--sidebar-width)",
             variant === "sidebar" &&
               (side === "left"
                 ? "border-r border-border"
                 : "border-l border-border"),
             variant === "floating" &&
-              "m-2 h-[calc(100svh-1rem)] rounded-2xl border border-border shadow-sm",
+              "m-2 h-[calc(100svh-1rem)] rounded-2xl border border-border",
             variant === "inset" && "m-2 h-[calc(100svh-1rem)] rounded-2xl",
             panelClassName
           )}
@@ -953,7 +953,7 @@ export const AnimatedSidebarMenuSub = forwardRef<
           transition={context.reduce ? { duration: 0.12 } : undefined}
           data-slot="sidebar-menu-sub"
           className={cn(
-            "relative mt-1 ml-5 flex min-w-0 flex-col gap-0.5 border-l border-border pl-3",
+            "relative mt-1 ml-3 flex min-w-0 flex-col gap-0.5",
             className
           )}
         >

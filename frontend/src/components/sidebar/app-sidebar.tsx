@@ -4,11 +4,10 @@ import {
   AnimatedSidebarContent,
   AnimatedSidebarFooter,
   AnimatedSidebarRail,
-} from "@/components/motion/animated-sidebar"
-import { SessionList } from "@/components/sidebar/session-list"
-import { SidebarQuickActions } from "@/components/sidebar/quick-actions"
-import { useArchivedSessions } from "@/lib/queries"
-import type { ProjectRecord, SessionRecord } from "@/lib/orchd"
+} from "@/components/motion/animated-sidebar.tsx"
+import { SessionList } from "@/components/sidebar/session-list.tsx"
+import { useArchivedSessions } from "@/lib/queries.ts"
+import type { ProjectRecord, SessionRecord } from "@/lib/orchd.ts"
 
 export interface AppSidebarProps {
   sessions: SessionRecord[]
@@ -39,14 +38,9 @@ export function AppSidebar({
       ariaLabel="Agent workspace"
       collapsible="offcanvas"
       className="min-h-0"
-      panelClassName="h-full bg-background"
+      panelClassName="h-full bg-sidebar text-sidebar-foreground"
     >
       <AnimatedSidebarContent className="gap-4 overflow-hidden px-2 py-4">
-        <SidebarQuickActions
-          onCreateProject={onCreateProject}
-          historyOnly={historyOnly}
-          onToggleHistory={() => setHistoryOnly((only) => !only)}
-        />
         <SessionList
           sessions={historyOnly ? (archivedSessions.data ?? []) : sessions}
           projects={projects}
@@ -55,10 +49,12 @@ export function AppSidebar({
           searchOpen={searchOpen}
           searchQuery={searchQuery}
           onSearchQueryChange={setSearchQuery}
-          historyOnly={historyOnly}
           loading={historyOnly ? archivedSessions.isLoading : loading}
           onCreate={onCreate}
           onToggleSearch={() => setSearchOpen((open) => !open)}
+          onCreateProject={onCreateProject}
+          historyOnly={historyOnly}
+          onToggleHistory={() => setHistoryOnly((only) => !only)}
         />
       </AnimatedSidebarContent>
 

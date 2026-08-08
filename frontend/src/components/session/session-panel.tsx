@@ -1,15 +1,22 @@
-import {Bot, PanelLeft} from "lucide-react"
-import {Fragment, useCallback, useEffect, useMemo, useRef, useState,} from "react"
-import {useQueryClient} from "@tanstack/react-query"
-import {toast} from "sonner"
-import type {PromptContextUsage} from "@/components/agents/prompt-input"
-import {AnimatedSidebarTrigger} from "@/components/motion/animated-sidebar"
-import {MessageGroup, MessageScroller} from "@/components/agents/message"
-import {SessionComposer} from "@/components/session/session-composer"
-import {SessionHeader} from "@/components/session/session-header"
-import {SessionIconRail} from "@/components/session/session-icon-rail"
-import {TimelineItem} from "@/components/session/timeline-item"
-import {TurnWork} from "@/components/session/turn-work"
+import { Bot, PanelLeft } from "lucide-react"
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
+import { useQueryClient } from "@tanstack/react-query"
+import { toast } from "sonner"
+import type { PromptContextUsage } from "@/components/agents/prompt-input"
+import { AnimatedSidebarTrigger } from "@/components/motion/animated-sidebar"
+import { MessageGroup, MessageScroller } from "@/components/agents/message"
+import { SessionComposer } from "@/components/session/session-composer"
+import { SessionHeader } from "@/components/session/session-header"
+import { SessionIconRail } from "@/components/session/session-icon-rail"
+import { TimelineItem } from "@/components/session/timeline-item"
+import { TurnWork } from "@/components/session/turn-work"
 import {
   agentIcon,
   type AgentKind,
@@ -21,10 +28,10 @@ import {
   type SessionRecord,
   type ThinkingEffort,
 } from "@/lib/orchd"
-import {queryKeys, useCreateSession, useModels} from "@/lib/queries"
-import {finalAssistantTextIds, isHiddenToolCall} from "@/lib/timeline"
-import {groupTimelineByTurn, turnDurationSeconds} from "@/lib/timeline-groups"
-import {useSessionSocket} from "@/lib/use-session-socket"
+import { queryKeys, useCreateSession, useModels } from "@/lib/queries"
+import { finalAssistantTextIds, isHiddenToolCall } from "@/lib/timeline"
+import { groupTimelineByTurn, turnDurationSeconds } from "@/lib/timeline-groups"
+import { useSessionSocket } from "@/lib/use-session-socket"
 
 // Stable identity so the loading fallback doesn't defeat memoization.
 const EMPTY_MODELS: ModelInfo[] = []

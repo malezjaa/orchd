@@ -1,14 +1,26 @@
-import {useState} from "react"
-import {CircleCheckIcon, InfoIcon, Loader2Icon, OctagonXIcon, TriangleAlertIcon,} from "lucide-react"
-import {Toaster as Sonner, type ToasterProps} from "sonner"
-import {AppSidebar} from "@/components/app-sidebar"
-import {AnimatedSidebarInset, AnimatedSidebarProvider,} from "@/components/motion/animated-sidebar"
-import {NewProjectPalette} from "@/components/project/new-project-palette"
-import {NewSessionPalette} from "@/components/session/new-session-palette"
-import {type DraftSession, SessionPanel,} from "@/components/session/session-panel"
-import {useTheme} from "@/components/theme-provider"
-import type {AgentKind, ProjectRecord, SessionRecord} from "@/lib/orchd"
-import {useArchivedSessions, useProjects, useSessions} from "@/lib/queries"
+import { useState } from "react"
+import {
+  CircleCheckIcon,
+  InfoIcon,
+  Loader2Icon,
+  OctagonXIcon,
+  TriangleAlertIcon,
+} from "lucide-react"
+import { Toaster as Sonner, type ToasterProps } from "sonner"
+import { AppSidebar } from "@/components/sidebar/app-sidebar.tsx"
+import {
+  AnimatedSidebarInset,
+  AnimatedSidebarProvider,
+} from "@/components/motion/animated-sidebar"
+import { NewProjectPalette } from "@/components/project/new-project-palette"
+import { NewSessionPalette } from "@/components/session/new-session-palette"
+import {
+  type DraftSession,
+  SessionPanel,
+} from "@/components/session/session-panel"
+import { useTheme } from "@/components/theme-provider"
+import type { AgentKind, ProjectRecord, SessionRecord } from "@/lib/orchd"
+import { useArchivedSessions, useProjects, useSessions } from "@/lib/queries"
 
 export function AppShell() {
   const { data: sessions = [], isLoading } = useSessions()

@@ -11,9 +11,6 @@ export interface WorkingIndicatorProps {
   className?: string
 }
 
-// A live "N seconds and counting" readout, mounted for as long as the agent is
-// actively working. Static and muted on purpose, since this is scaffolding
-// around the eventual report, not the content itself.
 export function WorkingIndicator({
   children = "Working",
   startedAt,

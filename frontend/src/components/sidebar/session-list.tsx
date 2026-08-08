@@ -1,7 +1,10 @@
 import {
   Archive,
   ArchiveRestore,
+  ArrowLeft,
   Folder,
+  FolderOpen,
+  FolderPlus,
   MoreHorizontal,
   Search as SearchIcon,
   SquarePen,
@@ -33,6 +36,7 @@ import {
 } from "@/lib/orchd"
 import { useArchiveSession, useUnarchiveSession } from "@/lib/queries"
 import { cn } from "@/lib/utils"
+import { TooltipIcon } from "@/components/tooltip-icon.tsx"
 
 export interface SessionListProps {
   onCreate: () => void
@@ -42,10 +46,12 @@ export interface SessionListProps {
   onSelect: (id: string) => void
   searchQuery: string
   onSearchQueryChange: (value: string) => void
-  historyOnly: boolean
   loading?: boolean
   searchOpen: boolean
   onToggleSearch: () => void
+  onCreateProject: () => void
+  historyOnly: boolean
+  onToggleHistory: () => void
 }
 
 interface ProjectGroup {
@@ -63,9 +69,6 @@ function matchesQuery(session: SessionRecord, query: string) {
   )
 }
 
-// Mirrors the open panel's "Working · Ns" readout so the count keeps
-// going after navigating away. Falls back to counting from this row's
-// mount when the panel that owns the real start time isn't open.
 function SessionWorkingStatus({ session }: { session: SessionRecord }) {
   return (
     <WorkingIndicator
@@ -145,9 +148,11 @@ export function SessionList({
   searchOpen,
   searchQuery,
   onSearchQueryChange,
-  historyOnly,
   loading,
   onToggleSearch,
+  onCreateProject,
+  historyOnly,
+  onToggleHistory,
 }: SessionListProps) {
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(
     () => new Set()
@@ -194,21 +199,46 @@ export function SessionList({
 
   return (
     <AnimatedSidebarGroup className="min-h-0 flex-1 px-1 py-0">
-      <AnimatedSidebarGroupLabel className="mb-1 h-8 px-2 text-xs font-medium tracking-normal normal-case">
+      <AnimatedSidebarGroupLabel className="mb-1 h-8 px-1 text-xs font-medium tracking-normal normal-case">
         {historyOnly ? (
-          <>History</>
+          <div className={"flex flex-row items-center gap-0.5"}>
+            <TooltipIcon label="Go back" side="top" onClick={onToggleHistory}>
+              <ArrowLeft className="size-4" />
+            </TooltipIcon>
+            History
+          </div>
         ) : (
-          <div className={"flex w-full flex-row justify-between"}>
-            Sessions
-            <div className={"flex flex-row items-center gap-2"}>
-              <SearchIcon
-                className={"size-4 hover:cursor-pointer hover:text-foreground"}
-                onClick={() => onToggleSearch()}
-              />
-              <SquarePen
-                className={"size-4 hover:cursor-pointer hover:text-foreground"}
-                onClick={() => onCreate()}
-              />
+          <div className="flex w-full flex-row justify-between">
+            <div className="flex flex-row items-center gap-0.5">
+              <TooltipIcon
+                label="Create project"
+                side="top"
+                onClick={onCreateProject}
+              >
+                <FolderPlus className="size-4" />
+              </TooltipIcon>
+
+              <TooltipIcon label="Create session" side="top" onClick={onCreate}>
+                <SquarePen className="size-4" />
+              </TooltipIcon>
+
+              <TooltipIcon
+                label="Archived chats"
+                side="top"
+                onClick={onToggleHistory}
+              >
+                <Archive className="size-4" />
+              </TooltipIcon>
+            </div>
+
+            <div className="flex flex-row items-center gap-2">
+              <TooltipIcon
+                label="Toggle search"
+                side="top"
+                onClick={onToggleSearch}
+              >
+                <SearchIcon className="size-4" />
+              </TooltipIcon>
             </div>
           </div>
         )}
@@ -236,7 +266,13 @@ export function SessionList({
                 <AnimatedSidebarMenuItem key={project.id}>
                   <div className="group/project relative">
                     <AnimatedSidebarMenuButton
-                      icon={<Folder className="size-4" />}
+                      icon={
+                        expanded ? (
+                          <FolderOpen className="size-4" />
+                        ) : (
+                          <Folder className="size-4" />
+                        )
+                      }
                       ariaExpanded={expanded}
                       closeOnSelect={false}
                       onSelect={() => toggleProject(project.id)}
@@ -317,10 +353,6 @@ export function SessionList({
             ) : null}
           </AnimatedSidebarMenu>
         </div>
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-linear-to-t from-background to-transparent"
-        />
       </AnimatedSidebarGroupContent>
     </AnimatedSidebarGroup>
   )

@@ -1,12 +1,6 @@
 import { useState } from "react"
 import { FolderTree, GitBranch, SquareTerminal } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
-import { cn } from "@/lib/utils"
+import { TooltipIcon } from "@/components/tooltip-icon.tsx"
 
 function GithubIcon({ className }: { className?: string }) {
   return (
@@ -59,29 +53,14 @@ export function SessionIconRail() {
       className="flex w-11 shrink-0 flex-col items-center gap-1 border-l border-border py-3"
     >
       {RAIL_ACTIONS.map(({ id, label, icon }) => (
-        <Tooltip key={id}>
-          <TooltipTrigger
-            render={
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label={label}
-                aria-pressed={active === id}
-                onClick={() =>
-                  setActive((current) => (current === id ? null : id))
-                }
-                className={cn(
-                  "rounded-lg text-muted-foreground hover:text-foreground",
-                  active === id && "bg-muted text-foreground"
-                )}
-              >
-                {icon({ className: "size-4" })}
-              </Button>
-            }
-          />
-          <TooltipContent side="left">{label}</TooltipContent>
-        </Tooltip>
+        <TooltipIcon
+          key={id}
+          label={label}
+          active={active === id}
+          onClick={() => setActive((current) => (current === id ? null : id))}
+        >
+          {icon({ className: "size-4" })}
+        </TooltipIcon>
       ))}
     </aside>
   )

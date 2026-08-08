@@ -1,9 +1,10 @@
-import { KeyRound } from "lucide-react"
+import { KeyRound, Loader2 } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
-import { Input } from "@/components/motion/input"
-import { StatefulButton } from "@/components/motion/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { usePairDevice } from "@/lib/queries"
+import { Button } from "@/components/ui/button.tsx"
 
 export function PairingScreen() {
   const [pairingToken, setPairingToken] = useState("")
@@ -12,7 +13,9 @@ export function PairingScreen() {
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault()
+
     if (!pairingToken.trim()) return
+
     pair.mutate(
       {
         pairingToken: pairingToken.trim(),
@@ -21,53 +24,64 @@ export function PairingScreen() {
       {
         onSuccess: () => toast.success("Device paired"),
         onError: (err) =>
-          toast.error("Pairing failed", { description: err.message }),
+          toast.error("Pairing failed", {
+            description: err.message,
+          }),
       }
     )
   }
 
   return (
-    <div className="grid h-svh place-items-center bg-background px-4">
-      <div className="w-full max-w-sm">
-        <div className="mb-6 text-center">
-          <div className="mx-auto grid size-10 place-items-center rounded-xl bg-muted text-muted-foreground">
-            <KeyRound className="size-5" />
-          </div>
-          <h1 className="mt-3 text-sm font-medium text-foreground">
-            Pair this device
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Copy the pairing token printed in the orchd server's startup log and
-            paste it below.
-          </p>
-        </div>
+    <div>
+      <div>
+        <KeyRound className="size-5" />
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-          <Input
-            label="Pairing token"
-            value={pairingToken}
-            onChange={setPairingToken}
-            placeholder="paste the token from the server log"
-            autoFocus
-            autoComplete="off"
-            spellCheck={false}
-          />
-          <Input
-            label="Device label (optional)"
-            value={deviceLabel}
-            onChange={setDeviceLabel}
-            placeholder="e.g. laptop"
-            autoComplete="off"
-          />
-          <StatefulButton
+        <h1>Pair this device</h1>
+
+        <p>
+          Copy the pairing token printed in the orchd server's startup log and
+          paste it below.
+        </p>
+
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="pairing-token">Pairing token</Label>
+            <Input
+              id="pairing-token"
+              value={pairingToken}
+              onChange={(event) => setPairingToken(event.target.value)}
+              placeholder="Paste the token from the server log"
+              autoFocus
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="device-label">Device label (optional)</Label>
+            <Input
+              id="device-label"
+              value={deviceLabel}
+              onChange={(event) => setDeviceLabel(event.target.value)}
+              placeholder="e.g. laptop"
+              autoComplete="off"
+            />
+          </div>
+
+          <Button
             type="submit"
             className="mt-1 w-full"
-            state={pair.isPending ? "loading" : "idle"}
-            loadingText="Pairing…"
-            disabled={!pairingToken.trim()}
+            disabled={!pairingToken.trim() || pair.isPending}
           >
-            Pair device
-          </StatefulButton>
+            {pair.isPending ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                Pairing…
+              </>
+            ) : (
+              "Pair device"
+            )}
+          </Button>
         </form>
       </div>
     </div>
