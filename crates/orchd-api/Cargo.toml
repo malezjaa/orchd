@@ -1,0 +1,23 @@
+[package]
+name = "orchd-api"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+orchd-core.workspace = true
+orchd-store.workspace = true
+orchd-session.workspace = true
+
+tokio.workspace = true
+tokio-stream.workspace = true
+futures.workspace = true
+axum.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+time.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tower_governor.workspace = true

@@ -1,0 +1,73 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/orchd-core",
+    "crates/orchd-store",
+    "crates/orchd-session",
+    "crates/orchd-api",
+    "crates/orchd-proc",
+    "crates/orchd-adapters",
+    "crates/orchd-server",
+    "crates/orchd-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+
+[workspace.dependencies]
+orchd-core = { path = "crates/orchd-core" }
+orchd-store = { path = "crates/orchd-store" }
+orchd-session = { path = "crates/orchd-session" }
+orchd-api = { path = "crates/orchd-api" }
+orchd-proc = { path = "crates/orchd-proc" }
+orchd-adapters = { path = "crates/orchd-adapters" }
+orchd-server = { path = "crates/orchd-server" }
+
+tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["codec"] }
+tokio-stream = "0.1"
+futures = "0.3"
+
+axum = { version = "0.8", features = ["ws"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["trace", "cors"] }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+sqlx = { version = "0.8", default-features = false, features = [
+    "runtime-tokio",
+    "tls-rustls",
+    "sqlite",
+    "macros",
+    "migrate",
+    "json",
+] }
+
+uuid = { version = "1", features = ["v4", "v7", "serde"] }
+time = { version = "0.3", features = ["serde", "formatting", "parsing"] }
+
+thiserror = "1"
+anyhow = "1"
+
+toml = "0.8"
+dirs = "5"
+
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+dashmap = "6"
+async-trait = "0.1"
+secrecy = "0.10"
+rand = "0.8"
+sha2 = "0.10"
+tower_governor = "0.8"
+
+command-group = { version = "5", features = ["with-tokio"] }
+nix = { version = "0.29", features = ["signal", "process"] }
+
+clap = { version = "4", features = ["derive"] }
+
+[profile.dev]
+debug = 0

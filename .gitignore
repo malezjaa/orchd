@@ -1,0 +1,6 @@
+/target
+orchd.db
+orchd.db-shm
+orchd.db-wal
+.idea
+.claude

@@ -1,0 +1,17 @@
+[package]
+name = "orchd-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "orchd"
+path = "src/main.rs"
+
+[dependencies]
+orchd-server.workspace = true
+
+tokio.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+clap.workspace = true
+command-group.workspace = true

@@ -1,0 +1,22 @@
+[package]
+name = "orchd-session"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+orchd-core.workspace = true
+orchd-store.workspace = true
+orchd-proc.workspace = true
+orchd-adapters.workspace = true
+
+tokio.workspace = true
+tokio-stream.workspace = true
+futures.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+time.workspace = true
+thiserror.workspace = true
+async-trait.workspace = true
+dashmap.workspace = true
+tracing.workspace = true

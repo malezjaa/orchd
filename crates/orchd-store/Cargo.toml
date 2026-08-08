@@ -1,0 +1,19 @@
+[package]
+name = "orchd-store"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+orchd-core.workspace = true
+
+tokio.workspace = true
+sqlx.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+time.workspace = true
+thiserror.workspace = true
+async-trait.workspace = true
+tracing.workspace = true
+rand.workspace = true
+sha2.workspace = true
