@@ -1,15 +1,15 @@
-use std::{path::PathBuf, str::FromStr};
-
+use std::str::FromStr;
 use axum::{
-  Json, Router,
   extract::{Path, Query, State},
   http::StatusCode,
   routing::{get, post},
+  Json, Router,
 };
 use orchd_core::{AgentKind, ModelInfo, ProjectId, SessionId};
 use orchd_store::{ProjectRecord, SessionRecord, SettingsPatch, SettingsRecord};
 use serde::{Deserialize, Serialize};
 
+use crate::file_tree::{browse_fs, file_tree};
 use crate::{error::ApiError, state::AppState};
 
 /// Everything here sits behind the `require_session` middleware. `/health` is
@@ -26,12 +26,11 @@ pub fn router() -> Router<AppState> {
     .route("/projects/{id}/archive", post(archive_project))
     .route("/projects/{id}/sessions", get(list_project_sessions))
     .route("/fs/browse", get(browse_fs))
+    .route("/fs/tree", get(file_tree))
     .route("/models", get(list_models))
     .route("/settings", get(get_settings).patch(update_settings))
 }
 
-/// Serves the hardcoded model catalog so a picker or "context used" indicator
-/// doesn't have to duplicate it.
 async fn list_models() -> Json<&'static [ModelInfo]> {
   Json(orchd_core::SUPPORTED_MODELS)
 }
@@ -222,70 +221,3 @@ async fn update_settings(
   Ok(Json(state.registry.update_settings(patch).await?))
 }
 
-#[derive(Deserialize)]
-pub struct BrowseFsQuery {
-  pub path: Option<String>,
-}
-
-#[derive(Serialize)]
-pub struct FsEntry {
-  pub name: String,
-  pub path: String,
-}
-
-#[derive(Serialize)]
-pub struct BrowseFsResponse {
-  pub path: String,
-  pub parent: Option<String>,
-  pub entries: Vec<FsEntry>,
-}
-
-fn home_dir() -> PathBuf {
-  std::env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/"))
-}
-
-/// Lists subdirectories for the project-creation folder picker, defaulting to
-/// the daemon owner's home. Directories only, since this picks a project root
-/// rather than browsing files. Any absolute path on the host is fair game: the
-/// caller is the authenticated single owner, the same trust boundary
-/// `create_project` already accepts.
-async fn browse_fs(
-  Query(query): Query<BrowseFsQuery>,
-) -> Result<Json<BrowseFsResponse>, ApiError> {
-  let requested = match query.path {
-    Some(p) if !p.is_empty() => PathBuf::from(p),
-    _ => home_dir(),
-  };
-  let canonical = std::fs::canonicalize(&requested)
-    .map_err(|err| ApiError::bad_request(format!("cannot open directory: {err}")))?;
-  if !canonical.is_dir() {
-    return Err(ApiError::bad_request("path is not a directory"));
-  }
-
-  let read_dir = std::fs::read_dir(&canonical)
-    .map_err(|err| ApiError::bad_request(format!("cannot list directory: {err}")))?;
-
-  let mut entries = Vec::new();
-  for entry in read_dir.flatten() {
-    let name = entry.file_name().to_string_lossy().into_owned();
-    if name.starts_with('.') {
-      continue;
-    }
-    // `metadata()` follows symlinks so symlinked project directories still
-    // show up as browsable.
-    let Ok(metadata) = entry.metadata() else { continue };
-    if !metadata.is_dir() {
-      continue;
-    }
-    entries.push(FsEntry { name, path: entry.path().to_string_lossy().into_owned() });
-  }
-  entries.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
-
-  let parent = canonical.parent().map(|p| p.to_string_lossy().into_owned());
-
-  Ok(Json(BrowseFsResponse {
-    path: canonical.to_string_lossy().into_owned(),
-    parent,
-    entries,
-  }))
-}

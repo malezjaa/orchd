@@ -21,6 +21,7 @@ import {
 import { SettingsEffects } from "@/components/settings/settings-effects"
 import { useTheme } from "@/components/theme-provider"
 import type { AgentKind, ProjectRecord, SessionRecord } from "@/lib/orchd"
+import { basename } from "@/lib/orchd"
 import { useArchivedSessions, useProjects, useSessions } from "@/lib/queries"
 
 export function AppShell() {
@@ -30,6 +31,7 @@ export function AppShell() {
   const [draft, setDraft] = useState<DraftSession | null>(null)
   const [newSessionOpen, setNewSessionOpen] = useState(false)
   const [newProjectOpen, setNewProjectOpen] = useState(false)
+  const [treeOpen, setTreeOpen] = useState(false)
   const { theme } = useTheme()
 
   // The normal list excludes archived sessions, but the History view
@@ -42,18 +44,31 @@ export function AppShell() {
     archivedSessions.find((session) => session.id === activeId) ??
     null
 
+  // The tree roots at the session's project folder, falling back to its cwd
+  // when the session has no registered project (e.g. legacy records).
+  const activeProject = activeSession?.project_id
+    ? (projects.find((project) => project.id === activeSession.project_id) ??
+      null)
+    : null
+  const treeRoot = activeProject?.path ?? activeSession?.cwd ?? null
+  const treeTitle =
+    activeProject?.name ?? (activeSession ? basename(activeSession.cwd) : "")
+
   const handleSelect = (id: string) => {
     setDraft(null)
+    setTreeOpen(true)
     setActiveId(id)
   }
 
   const handleDraftStart = (project: ProjectRecord, agentKind: AgentKind) => {
     setActiveId(null)
+    setTreeOpen(false)
     setDraft({ project, agentKind })
   }
 
   const handleSessionCreated = (session: SessionRecord) => {
     setDraft(null)
+    setTreeOpen(true)
     setActiveId(session.id)
   }
 
@@ -68,6 +83,10 @@ export function AppShell() {
         onCreate={() => setNewSessionOpen(true)}
         onCreateProject={() => setNewProjectOpen(true)}
         loading={isLoading}
+        treeOpen={treeOpen}
+        treeRoot={treeRoot}
+        treeTitle={treeTitle}
+        onTreeBack={() => setTreeOpen(false)}
       />
       <AnimatedSidebarInset>
         <SessionPanel

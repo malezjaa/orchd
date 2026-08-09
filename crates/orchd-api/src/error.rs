@@ -38,6 +38,10 @@ impl ApiError {
     ApiError(StatusCode::BAD_REQUEST, msg.into())
   }
 
+  pub fn internal(msg: impl Into<String>) -> Self {
+    ApiError(StatusCode::INTERNAL_SERVER_ERROR, msg.into())
+  }
+
   pub fn unauthorized(msg: impl Into<String>) -> Self {
     ApiError(StatusCode::UNAUTHORIZED, msg.into())
   }

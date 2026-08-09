@@ -148,6 +148,18 @@ export function useBrowseFolder(path: string | undefined, enabled: boolean) {
   })
 }
 
+// The project file tree plus git status, for the explorer shown when a session
+// is opened. Keyed by path so switching sessions refetches.
+export function useProjectTree(path: string | undefined, enabled: boolean) {
+  const token = useAuthToken()
+  return useQuery({
+    queryKey: ["fs-tree", path ?? "__none__"],
+    queryFn: () => api.fileTree(path as string),
+    enabled: enabled && token !== null && Boolean(path),
+    staleTime: 30_000,
+  })
+}
+
 export function useCreateSession() {
   const queryClient = useQueryClient()
   return useMutation({

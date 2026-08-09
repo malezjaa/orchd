@@ -70,5 +70,7 @@ portable-pty = "0.9"
 
 clap = { version = "4", features = ["derive"] }
 
+ignore = "0.4.33"
+
 [profile.dev]
 debug = 0

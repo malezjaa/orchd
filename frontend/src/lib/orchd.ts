@@ -3,10 +3,10 @@
 // crates/orchd-core/src/{event,command,agent,tool,permission}.rs and
 // crates/orchd-store/src/models.rs.
 
-import { Bot } from "lucide-react"
-import type { ComponentType, SVGProps } from "react"
-import { ClaudeLogo } from "@/components/icons/claude-logo"
-import { OpenAiLogo } from "@/components/icons/openai-logo"
+import {Bot} from "lucide-react"
+import type {ComponentType, SVGProps} from "react"
+import {ClaudeLogo} from "@/components/icons/claude-logo"
+import {OpenAiLogo} from "@/components/icons/openai-logo"
 
 export type AgentKind = "claude_code" | "codex"
 
@@ -105,7 +105,25 @@ export interface FsBrowseResponse {
   entries: FsEntry[]
 }
 
-// ---- Model catalog (orchd-core/src/models.rs) ------------------------------
+export type GitStatus =
+  | "added"
+  | "deleted"
+  | "ignored"
+  | "modified"
+  | "renamed"
+  | "untracked"
+
+export interface GitStatusEntry {
+  path: string
+  status: GitStatus
+}
+
+export interface FileTreeResponse {
+  path: string
+  files: string[]
+  git: GitStatusEntry[] | null
+}
+
 
 export type ModelProvider = "anthropic" | "open_ai"
 
@@ -135,8 +153,6 @@ export const MODEL_PROVIDER_ICON: Record<
   open_ai: OpenAiLogo,
 }
 
-// Dividing by 1000 unconditionally would render a 1,000,000-token window
-// as the misleading `1000K`.
 export function formatContextSize(tokens: number): string {
   if (tokens >= 1_000_000) {
     const millions = tokens / 1_000_000
@@ -182,8 +198,6 @@ export function agentIcon(
   return AGENT_ICON[kind as AgentKind] ?? Bot
 }
 
-// ---- Canonical tool identity (orchd-core/src/tool.rs) ---------------------
-
 export type CanonicalTool =
   | "file_read"
   | "file_write"
@@ -204,8 +218,6 @@ export type ToolOutput =
   | { kind: "text"; text: string }
   | { kind: "json"; value: unknown }
   | { kind: "file_diff"; path: string; diff: string }
-
-// ---- Permissions (orchd-core/src/permission.rs) ----------------------------
 
 export type PermissionKind =
   | "file_write"
@@ -236,8 +248,6 @@ export type Decision =
   | { type: "deny"; reason: string | null }
   | { type: "modify"; updated_input: unknown }
 
-// ---- Policy (orchd-core/src/policy.rs) -------------------------------------
-
 export type RuleAction = "allow" | "deny"
 
 // Matched in order before falling back to asking a human.
@@ -247,8 +257,6 @@ export interface PolicyRule {
   kind: PermissionKind
   pattern: string | null
 }
-
-// ---- Commands (orchd-core/src/command.rs) ----------------------------------
 
 export type ContentPart = { type: "text"; text: string }
 
@@ -268,8 +276,6 @@ export type SessionCommand =
   | { type: "set_model"; model: string | null; effort: ThinkingEffort | null }
   | { type: "close"; reason: CloseReason }
   | { type: "regenerate_title" }
-
-// ---- Events (orchd-core/src/event.rs) --------------------------------------
 
 export type StopReason = "end_turn" | "max_tokens" | "interrupted" | "error"
 export type CloseReason = "client_requested" | "idle" | "agent_crash" | "error"

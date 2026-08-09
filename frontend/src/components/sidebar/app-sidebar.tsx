@@ -1,6 +1,6 @@
-import { Settings } from "lucide-react"
-import { useState } from "react"
-import { SettingsDialog } from "@/components/settings/settings-dialog"
+import {Settings} from "lucide-react"
+import {useState} from "react"
+import {SettingsDialog} from "@/components/settings/settings-dialog"
 import {
   AnimatedSidebar,
   AnimatedSidebarContent,
@@ -8,15 +8,12 @@ import {
   AnimatedSidebarRail,
   useAnimatedSidebarPanel,
 } from "@/components/motion/animated-sidebar.tsx"
-import { SessionList } from "@/components/sidebar/session-list.tsx"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
-import { useArchivedSessions } from "@/lib/queries.ts"
-import { cn } from "@/lib/utils.ts"
-import type { ProjectRecord, SessionRecord } from "@/lib/orchd.ts"
+import {ProjectTreePanel} from "@/components/session/project-tree.tsx"
+import {SessionList} from "@/components/sidebar/session-list.tsx"
+import {Tooltip, TooltipContent, TooltipTrigger,} from "@/components/ui/tooltip"
+import {useArchivedSessions} from "@/lib/queries.ts"
+import {cn} from "@/lib/utils.ts"
+import type {ProjectRecord, SessionRecord} from "@/lib/orchd.ts"
 
 export interface AppSidebarProps {
   sessions: SessionRecord[]
@@ -26,6 +23,10 @@ export interface AppSidebarProps {
   onCreate: () => void
   onCreateProject: () => void
   loading?: boolean
+  treeOpen: boolean
+  treeRoot: string | null
+  treeTitle: string
+  onTreeBack: () => void
 }
 
 function SidebarSettingsButton({ onOpen }: { onOpen: () => void }) {
@@ -68,6 +69,10 @@ export function AppSidebar({
   onCreate,
   onCreateProject,
   loading,
+  treeOpen,
+  treeRoot,
+  treeTitle,
+  onTreeBack,
 }: AppSidebarProps) {
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
@@ -83,21 +88,29 @@ export function AppSidebar({
       panelClassName="h-full bg-sidebar text-sidebar-foreground"
     >
       <AnimatedSidebarContent className="gap-4 overflow-hidden px-2 py-4">
-        <SessionList
-          sessions={historyOnly ? (archivedSessions.data ?? []) : sessions}
-          projects={projects}
-          activeId={activeId}
-          onSelect={onSelect}
-          searchOpen={searchOpen}
-          searchQuery={searchQuery}
-          onSearchQueryChange={setSearchQuery}
-          loading={historyOnly ? archivedSessions.isLoading : loading}
-          onCreate={onCreate}
-          onToggleSearch={() => setSearchOpen((open) => !open)}
-          onCreateProject={onCreateProject}
-          historyOnly={historyOnly}
-          onToggleHistory={() => setHistoryOnly((only) => !only)}
-        />
+        {treeOpen && treeRoot ? (
+          <ProjectTreePanel
+            rootPath={treeRoot}
+            title={treeTitle}
+            onBack={onTreeBack}
+          />
+        ) : (
+          <SessionList
+            sessions={historyOnly ? (archivedSessions.data ?? []) : sessions}
+            projects={projects}
+            activeId={activeId}
+            onSelect={onSelect}
+            searchOpen={searchOpen}
+            searchQuery={searchQuery}
+            onSearchQueryChange={setSearchQuery}
+            loading={historyOnly ? archivedSessions.isLoading : loading}
+            onCreate={onCreate}
+            onToggleSearch={() => setSearchOpen((open) => !open)}
+            onCreateProject={onCreateProject}
+            historyOnly={historyOnly}
+            onToggleHistory={() => setHistoryOnly((only) => !only)}
+          />
+        )}
       </AnimatedSidebarContent>
 
       <AnimatedSidebarFooter>

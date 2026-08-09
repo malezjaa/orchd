@@ -4,11 +4,12 @@ mod http;
 mod state;
 mod terminal;
 mod ws;
+mod file_tree;
 
 use std::sync::Arc;
 
 pub use auth::AuthConfig;
-use axum::{Router, middleware, routing::get};
+use axum::{middleware, routing::get, Router};
 use orchd_session::SessionRegistry;
 pub use state::AppState;
 use terminal::TerminalRegistry;
