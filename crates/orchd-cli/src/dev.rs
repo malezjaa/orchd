@@ -37,14 +37,14 @@ pub async fn run(no_open: bool) -> anyhow::Result<()> {
   // trigger SIGTTIN and silently freeze the group. Pipe stdin instead, and
   // never take or drop it: EOF makes vite think its parent went away.
   let mut frontend = Command::new("pnpm")
-      .arg("dev")
-      .current_dir(&frontend_dir)
-      .env("FORCE_COLOR", "1")
-      .stdin(Stdio::piped())
-      .stdout(Stdio::piped())
-      .stderr(Stdio::piped())
-      .group_spawn()
-      .context("failed to start `pnpm dev`; is pnpm installed and on PATH?")?;
+    .arg("dev")
+    .current_dir(&frontend_dir)
+    .env("FORCE_COLOR", "1")
+    .stdin(Stdio::piped())
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped())
+    .group_spawn()
+    .context("failed to start `pnpm dev`; is pnpm installed and on PATH?")?;
 
   let (url_tx, mut url_rx) = mpsc::unbounded_channel::<String>();
   let inner = frontend.inner();
@@ -95,7 +95,8 @@ pub async fn run(no_open: bool) -> anyhow::Result<()> {
 #[cfg(unix)]
 async fn terminate() {
   use tokio::signal::unix::{SignalKind, signal};
-  let mut sigterm = signal(SignalKind::terminate()).expect("failed to install SIGTERM handler");
+  let mut sigterm =
+    signal(SignalKind::terminate()).expect("failed to install SIGTERM handler");
   sigterm.recv().await;
 }
 
@@ -106,10 +107,10 @@ async fn terminate() {
 
 fn workspace_root() -> PathBuf {
   PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-      .parent()
-      .and_then(|p| p.parent())
-      .expect("crates/orchd-cli has two parent directories")
-      .to_path_buf()
+    .parent()
+    .and_then(|p| p.parent())
+    .expect("crates/orchd-cli has two parent directories")
+    .to_path_buf()
 }
 
 async fn relay_and_scan(

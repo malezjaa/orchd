@@ -1143,10 +1143,7 @@ mod tests {
 
     // `Some(None)` explicitly clears a field back to unset.
     let cleared = store
-      .update_settings(SettingsPatch {
-        interface_font: Some(None),
-        ..Default::default()
-      })
+      .update_settings(SettingsPatch { interface_font: Some(None), ..Default::default() })
       .await
       .expect("update_settings");
     assert_eq!(cleared.interface_font, None);

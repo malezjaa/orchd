@@ -1,10 +1,10 @@
-import {FileTree, useFileTree, useFileTreeSearch} from "@pierre/trees/react"
-import {ArrowLeft, Loader2, TriangleAlert} from "lucide-react"
-import {useEffect} from "react"
-import {TooltipIcon} from "@/components/tooltip-icon"
-import {Input} from "@/components/ui/input"
-import type {GitStatusEntry} from "@/lib/orchd"
-import {useProjectTree} from "@/lib/queries"
+import { FileTree, useFileTree, useFileTreeSearch } from "@pierre/trees/react"
+import { ArrowLeft, Loader2, TriangleAlert } from "lucide-react"
+import { useEffect } from "react"
+import { TooltipIcon } from "@/components/tooltip-icon"
+import { Input } from "@/components/ui/input"
+import type { GitStatusEntry } from "@/lib/orchd"
+import { useProjectTree } from "@/lib/queries"
 
 function FileTreeView({
   paths,
@@ -20,6 +20,7 @@ function FileTreeView({
     search: false,
     initialExpansion: "closed",
     flattenEmptyDirectories: true,
+    icons: { set: "complete", colored: false },
   })
   const search = useFileTreeSearch(model)
 
@@ -37,11 +38,15 @@ function FileTreeView({
         className="h-8 rounded-lg px-2.5 text-xs"
       />
       <div className="min-h-0 flex-1 overflow-hidden">
-        <FileTree model={model} className="h-full min-h-0"   style={{
-          backgroundColor: 'var(--sidebar)',
-          borderColor: 'var(--border)',
-          ["--trees-bg" as string]: "var(--sidebar)",
-        }} />
+        <FileTree
+          model={model}
+          className="h-full min-h-0"
+          style={{
+            backgroundColor: "var(--sidebar)",
+            borderColor: "var(--border)",
+            ["--trees-bg" as string]: "var(--sidebar)",
+          }}
+        />
       </div>
     </div>
   )

@@ -17,17 +17,17 @@ import type {
   PromptOption,
 } from "@/components/agents/prompt-input"
 import { PromptInput } from "@/components/agents/prompt-input"
-import {
-  agentLabel,
-  formatContextSize,
-  MODEL_PROVIDER_ICON,
-  MODEL_PROVIDER_LABEL,
-} from "@/lib/orchd"
 import type {
   AgentMode,
   ModelInfo,
   PolicyRule,
   ThinkingEffort,
+} from "@/lib/orchd"
+import {
+  agentLabel,
+  formatContextSize,
+  MODEL_PROVIDER_ICON,
+  MODEL_PROVIDER_LABEL,
 } from "@/lib/orchd"
 
 export interface SessionComposerProps {
@@ -137,7 +137,7 @@ export function SessionComposer({
   })
 
   return (
-    <div className="shrink-0 bg-background p-3">
+    <div className="shrink-0 p-3">
       <div className="mx-auto max-w-3xl">
         <PromptInput
           loading={loading}

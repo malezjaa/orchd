@@ -3,10 +3,10 @@
 // crates/orchd-core/src/{event,command,agent,tool,permission}.rs and
 // crates/orchd-store/src/models.rs.
 
-import {Bot} from "lucide-react"
-import type {ComponentType, SVGProps} from "react"
-import {ClaudeLogo} from "@/components/icons/claude-logo"
-import {OpenAiLogo} from "@/components/icons/openai-logo"
+import { Bot } from "lucide-react"
+import type { ComponentType, SVGProps } from "react"
+import { ClaudeLogo } from "@/components/icons/claude-logo"
+import { OpenAiLogo } from "@/components/icons/openai-logo"
 
 export type AgentKind = "claude_code" | "codex"
 
@@ -123,7 +123,6 @@ export interface FileTreeResponse {
   files: string[]
   git: GitStatusEntry[] | null
 }
-
 
 export type ModelProvider = "anthropic" | "open_ai"
 

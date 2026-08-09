@@ -1,4 +1,4 @@
-import { getFileExtension, KNOWN_FILE_EXTENSIONS } from "@/lib/file-icon"
+import { getFileExtension, KNOWN_FILE_EXTENSIONS } from "@/lib/file-icon.tsx"
 
 export interface PathMention {
   kind: "file" | "folder"

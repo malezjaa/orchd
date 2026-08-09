@@ -4,7 +4,11 @@ mod browser;
 mod dev;
 
 #[derive(Parser)]
-#[command(name = "orchd", version, about = "orchd: self-hosted coding-agent orchestrator")]
+#[command(
+  name = "orchd",
+  version,
+  about = "orchd: self-hosted coding-agent orchestrator"
+)]
 struct Cli {
   #[command(subcommand)]
   command: Command,

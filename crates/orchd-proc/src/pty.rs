@@ -49,7 +49,11 @@ impl PtySession {
   /// `/bin/bash`) in `cwd`. The blocking PTY reader runs on a dedicated
   /// `spawn_blocking` task and forwards chunks over the returned channel,
   /// which closes when the shell exits.
-  pub fn spawn(cwd: &str, cols: u16, rows: u16) -> Result<(Self, mpsc::Receiver<Vec<u8>>), PtyError> {
+  pub fn spawn(
+    cwd: &str,
+    cols: u16,
+    rows: u16,
+  ) -> Result<(Self, mpsc::Receiver<Vec<u8>>), PtyError> {
     let pty_system = native_pty_system();
     let pair = pty_system
       .openpty(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 })

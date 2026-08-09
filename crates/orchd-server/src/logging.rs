@@ -19,11 +19,12 @@ const DIM: &str = "\x1b[2m";
 /// (falling back to `info` for orchd's own crates) and disables color
 /// automatically when the output isn't a terminal.
 pub fn init() {
-  let filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-    tracing_subscriber::EnvFilter::new(
-      "orchd=info,orchd_api=info,orchd_session=info,orchd_store=info,orchd_cli=info",
-    )
-  });
+  let filter =
+    tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+      tracing_subscriber::EnvFilter::new(
+        "orchd=info,orchd_api=info,orchd_session=info,orchd_store=info,orchd_cli=info",
+      )
+    });
 
   tracing_subscriber::registry()
     .with(filter)

@@ -1,32 +1,29 @@
 use std::{
-    str::FromStr,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc, Mutex,
-    },
+  str::FromStr,
+  sync::{
+    Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
+  },
 };
 
 use axum::{
-    extract::{
-        ws::{Message, WebSocket, WebSocketUpgrade},
-        Path, Query, State,
-    },
-    http::StatusCode,
-    response::{IntoResponse, Response},
-    routing::get,
-    Router,
+  Router,
+  extract::{
+    Path, Query, State,
+    ws::{Message, WebSocket, WebSocketUpgrade},
+  },
+  http::StatusCode,
+  response::{IntoResponse, Response},
+  routing::get,
 };
-use dashmap::{mapref::entry::Entry, DashMap};
+use dashmap::{DashMap, mapref::entry::Entry};
 use futures::{SinkExt, StreamExt};
 use orchd_core::SessionId;
 use orchd_proc::{PtyError, PtySession};
 use serde::Deserialize;
 use tokio::sync::broadcast;
 
-use crate::{
-    state::AppState,
-    ws::verify_ws_ticket,
-};
+use crate::{state::AppState, ws::verify_ws_ticket};
 
 /// A raw PTY running the daemon owner's own shell, scoped to a session's
 /// `cwd`. Unlike `/sessions/{id}/ws`, this carries no canonical event/command
@@ -222,7 +219,9 @@ async fn handler(
     Err(_) => return StatusCode::NOT_FOUND.into_response(),
   };
 
-  ws.on_upgrade(move |socket| run(socket, state, session_id, record.cwd, query.cols, query.rows))
+  ws.on_upgrade(move |socket| {
+    run(socket, state, session_id, record.cwd, query.cols, query.rows)
+  })
 }
 
 async fn run(
@@ -239,7 +238,9 @@ async fn run(
     Ok(handle) => handle,
     Err(err) => {
       let _ = sender
-        .send(Message::Text(format!("\r\n\x1b[31mFailed to start shell: {err}\x1b[0m\r\n").into()))
+        .send(Message::Text(
+          format!("\r\n\x1b[31mFailed to start shell: {err}\x1b[0m\r\n").into(),
+        ))
         .await;
       return;
     }

@@ -4,7 +4,9 @@ mod translator;
 use orchd_core::{
   AgentAdapter, AgentCapabilities, AgentKind, Framing, LaunchSpec, SpawnSpec, Translator,
 };
-pub use title_generation::{TitleGenerationError, generate_initial_title, regenerate_title};
+pub use title_generation::{
+  TitleGenerationError, generate_initial_title, regenerate_title,
+};
 pub use translator::ClaudeCodeTranslator;
 
 /// Default binary name, resolved via `PATH`. Title generation uses this

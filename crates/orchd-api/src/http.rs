@@ -1,16 +1,20 @@
 use std::str::FromStr;
+
 use axum::{
+  Json, Router,
   extract::{Path, Query, State},
   http::StatusCode,
   routing::{get, post},
-  Json, Router,
 };
 use orchd_core::{AgentKind, ModelInfo, ProjectId, SessionId};
 use orchd_store::{ProjectRecord, SessionRecord, SettingsPatch, SettingsRecord};
 use serde::{Deserialize, Serialize};
 
-use crate::file_tree::{browse_fs, file_tree};
-use crate::{error::ApiError, state::AppState};
+use crate::{
+  error::ApiError,
+  file_tree::{browse_fs, file_tree},
+  state::AppState,
+};
 
 /// Everything here sits behind the `require_session` middleware. `/health` is
 /// deliberately not in this router, since it must stay reachable without a
@@ -220,4 +224,3 @@ async fn update_settings(
 ) -> Result<Json<SettingsRecord>, ApiError> {
   Ok(Json(state.registry.update_settings(patch).await?))
 }
-

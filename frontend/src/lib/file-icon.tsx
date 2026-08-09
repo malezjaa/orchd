@@ -1,17 +1,22 @@
 import {
-  File,
   FileArchive,
   FileAudio,
   FileCode2,
   FileCog,
   FileImage,
   FileJson,
+  FileQuestionMark,
   FileSpreadsheet,
   FileText,
   FileVideo,
   Folder,
   type LucideIcon,
 } from "lucide-react"
+import {
+  getBuiltInFileIconName,
+  resolveBuiltInFileIconToken,
+} from "@/lib/builtinIcons.ts"
+import type { ComponentType } from "react"
 
 const CODE_EXTENSIONS = [
   "ts",
@@ -105,8 +110,49 @@ export function getFileExtension(path: string): string {
   return base.slice(dot + 1).toLowerCase()
 }
 
-export function getFileIcon(path: string, isDirectory = false): LucideIcon {
+const getExtensionCandidates = (fileName: string): string[] => {
+  const segments = fileName.toLowerCase().split(".")
+  const candidates: string[] = []
+  for (let index = 1; index < segments.length; index += 1) {
+    candidates.push(segments.slice(index).join("."))
+  }
+  return candidates
+}
+
+type FileIconProps = {
+  className?: string
+  "aria-hidden"?: boolean
+}
+
+function SpriteIcon({
+  name,
+  className,
+  ...props
+}: FileIconProps & { name: string }) {
+  return (
+    <svg viewBox="0 0 16 16" className={className} {...props}>
+      <use href={`#${name}`} />
+    </svg>
+  )
+}
+
+export function getFileIcon(
+  path: string,
+  isDirectory = false
+): ComponentType<FileIconProps> {
   if (isDirectory) return Folder
-  const extension = getFileExtension(path)
-  return EXTENSION_ICONS.get(extension) ?? File
+
+  const label = path.split("/").filter(Boolean).pop() || path
+
+  const token = resolveBuiltInFileIconToken(
+    "complete",
+    label,
+    getExtensionCandidates(label)
+  )
+
+  if (!token) return FileQuestionMark
+
+  const iconName = getBuiltInFileIconName(token)
+
+  return (props) => <SpriteIcon name={iconName} {...props} />
 }

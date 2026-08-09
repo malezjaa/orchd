@@ -179,7 +179,10 @@ impl ClaudeCodeTranslator {
     }
   }
 
-  fn on_message_start(&mut self, event: &Value) -> Result<Vec<EventPayload>, AdapterError> {
+  fn on_message_start(
+    &mut self,
+    event: &Value,
+  ) -> Result<Vec<EventPayload>, AdapterError> {
     let usage = event.get("message").and_then(|m| m.get("usage"));
     self.last_message_usage = Some(MessageUsage {
       input_tokens: usage
@@ -378,7 +381,10 @@ impl ClaudeCodeTranslator {
     // fall back only for a turn that errored before producing one.
     let usage = value.get("usage");
     let context_usage = self.last_message_usage.unwrap_or(MessageUsage {
-      input_tokens: usage.and_then(|u| u.get("input_tokens")).and_then(Value::as_u64).unwrap_or(0),
+      input_tokens: usage
+        .and_then(|u| u.get("input_tokens"))
+        .and_then(Value::as_u64)
+        .unwrap_or(0),
       cache_creation_input_tokens: usage
         .and_then(|u| u.get("cache_creation_input_tokens"))
         .and_then(Value::as_u64)
@@ -680,7 +686,12 @@ mod tests {
     .unwrap()
   }
 
-  fn result_frame(input: u64, cache_creation: u64, cache_read: u64, output: u64) -> Frame {
+  fn result_frame(
+    input: u64,
+    cache_creation: u64,
+    cache_read: u64,
+    output: u64,
+  ) -> Frame {
     Frame::from_json(&json!({
       "type": "result",
       "subtype": "success",
@@ -721,7 +732,12 @@ mod tests {
           cache_read_input_tokens,
           output_tokens,
           ..
-        } => Some((*input_tokens, *cache_creation_input_tokens, *cache_read_input_tokens, *output_tokens)),
+        } => Some((
+          *input_tokens,
+          *cache_creation_input_tokens,
+          *cache_read_input_tokens,
+          *output_tokens,
+        )),
         _ => None,
       })
       .expect("decode_result must emit a UsageUpdate");

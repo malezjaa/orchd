@@ -1,6 +1,6 @@
-import {Settings} from "lucide-react"
-import {useState} from "react"
-import {SettingsDialog} from "@/components/settings/settings-dialog"
+import { Settings } from "lucide-react"
+import { useState } from "react"
+import { SettingsDialog } from "@/components/settings/settings-dialog"
 import {
   AnimatedSidebar,
   AnimatedSidebarContent,
@@ -8,12 +8,16 @@ import {
   AnimatedSidebarRail,
   useAnimatedSidebarPanel,
 } from "@/components/motion/animated-sidebar.tsx"
-import {ProjectTreePanel} from "@/components/session/project-tree.tsx"
-import {SessionList} from "@/components/sidebar/session-list.tsx"
-import {Tooltip, TooltipContent, TooltipTrigger,} from "@/components/ui/tooltip"
-import {useArchivedSessions} from "@/lib/queries.ts"
-import {cn} from "@/lib/utils.ts"
-import type {ProjectRecord, SessionRecord} from "@/lib/orchd.ts"
+import { ProjectTreePanel } from "@/components/session/project-tree.tsx"
+import { SessionList } from "@/components/sidebar/session-list.tsx"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import { useArchivedSessions } from "@/lib/queries.ts"
+import { cn } from "@/lib/utils.ts"
+import type { ProjectRecord, SessionRecord } from "@/lib/orchd.ts"
 
 export interface AppSidebarProps {
   sessions: SessionRecord[]

@@ -16,8 +16,7 @@ const TITLE_MODEL: &str = "claude-haiku-4-5";
 
 const TITLE_GENERATION_TIMEOUT: Duration = Duration::from_secs(45);
 
-const TITLE_JSON_SCHEMA: &str =
-  r#"{"type":"object","properties":{"title":{"type":"string"}},"required":["title"],"additionalProperties":false}"#;
+const TITLE_JSON_SCHEMA: &str = r#"{"type":"object","properties":{"title":{"type":"string"}},"required":["title"],"additionalProperties":false}"#;
 
 /// Keeps an otherwise unbounded transcript from ballooning a call that's
 /// supposed to be cheap. Takes the last N chars: once there's a previous title
@@ -75,35 +74,27 @@ pub async fn regenerate_title(
 
 fn initial_prompt(message: &str) -> String {
   format!(
-    "Generate a short title that will help someone recognize this coding \
-     session weeks later. Return JSON with exactly one key: title, whose \
-     value is a plain text string — never another JSON object, never \
-     wrapped in braces or quotes of its own.\n\n\
-     Editorial rules:\n\
-     - 3-8 words, under {TITLE_MAX_CHARS} characters.\n\
-     - Name the subject and the desired outcome, not the process used to \
-     get there.\n\
-     - Do not copy or truncate the message verbatim.\n\
-     - No quotes, labels, or trailing punctuation.\n\n\
-     User message:\n{message}"
+    "Generate a short title that will help someone recognize this coding session weeks \
+     later. Return JSON with exactly one key: title, whose value is a plain text string \
+     — never another JSON object, never wrapped in braces or quotes of its \
+     own.\n\nEditorial rules:\n- 3-8 words, under {TITLE_MAX_CHARS} characters.\n- Name \
+     the subject and the desired outcome, not the process used to get there.\n- Do not \
+     copy or truncate the message verbatim.\n- No quotes, labels, or trailing \
+     punctuation.\n\nUser message:\n{message}"
   )
 }
 
 fn regeneration_prompt(previous_title: &str, transcript: &str) -> String {
   format!(
-    "Regenerate the title for an existing coding session so it stays \
-     recognizable as the conversation has evolved. The previous title was \
-     {previous_title:?}. Return JSON with exactly one key: title, whose \
-     value is a plain text string — never another JSON object, never \
-     wrapped in braces or quotes of its own.\n\n\
-     Editorial rules:\n\
-     - 3-8 words, under {TITLE_MAX_CHARS} characters.\n\
-     - Preserve the durable subject; a session moving through planning, \
-     implementation, and review hasn't usually changed subjects.\n\
-     - Replace the previous title only if it's generic, inaccurate, or the \
-     topic has genuinely moved on.\n\
-     - No quotes, labels, or trailing punctuation.\n\n\
-     Session so far:\n{transcript}"
+    "Regenerate the title for an existing coding session so it stays recognizable as \
+     the conversation has evolved. The previous title was {previous_title:?}. Return \
+     JSON with exactly one key: title, whose value is a plain text string — never \
+     another JSON object, never wrapped in braces or quotes of its own.\n\nEditorial \
+     rules:\n- 3-8 words, under {TITLE_MAX_CHARS} characters.\n- Preserve the durable \
+     subject; a session moving through planning, implementation, and review hasn't \
+     usually changed subjects.\n- Replace the previous title only if it's generic, \
+     inaccurate, or the topic has genuinely moved on.\n- No quotes, labels, or trailing \
+     punctuation.\n\nSession so far:\n{transcript}"
   )
 }
 
@@ -133,7 +124,11 @@ fn tail_chars(text: &str, max_chars: usize) -> String {
   text.chars().skip(count - max_chars).collect()
 }
 
-async fn run(program: &str, cwd: &Path, prompt: &str) -> Result<String, TitleGenerationError> {
+async fn run(
+  program: &str,
+  cwd: &Path,
+  prompt: &str,
+) -> Result<String, TitleGenerationError> {
   let spec = SpawnSpec {
     program: program.to_string(),
     args: vec![
@@ -155,7 +150,8 @@ async fn run(program: &str, cwd: &Path, prompt: &str) -> Result<String, TitleGen
     cwd: cwd.to_path_buf(),
   };
 
-  let (mut process, pipes) = ManagedProcess::spawn(&spec).map_err(TitleGenerationError::Spawn)?;
+  let (mut process, pipes) =
+    ManagedProcess::spawn(&spec).map_err(TitleGenerationError::Spawn)?;
   // The prompt is passed as an argument, so drop stdin: otherwise the
   // subprocess blocks waiting for input it will never receive.
   drop(pipes.stdin);
@@ -177,10 +173,14 @@ async fn run(program: &str, cwd: &Path, prompt: &str) -> Result<String, TitleGen
   };
   wait_result.map_err(TitleGenerationError::Spawn)?;
 
-  let stdout_bytes =
-    stdout_task.await.map_err(|_| TitleGenerationError::Io(std::io::Error::other(
-      "title-generation stdout reader task panicked",
-    )))?.map_err(TitleGenerationError::Io)?;
+  let stdout_bytes = stdout_task
+    .await
+    .map_err(|_| {
+      TitleGenerationError::Io(std::io::Error::other(
+        "title-generation stdout reader task panicked",
+      ))
+    })?
+    .map_err(TitleGenerationError::Io)?;
 
   let envelope: ResultEnvelope =
     serde_json::from_slice(&stdout_bytes).map_err(TitleGenerationError::InvalidOutput)?;
@@ -200,7 +200,10 @@ mod tests {
 
   #[test]
   fn unwrap_nested_title_passes_plain_text_through() {
-    assert_eq!(unwrap_nested_title("Update package.json".to_string()), "Update package.json");
+    assert_eq!(
+      unwrap_nested_title("Update package.json".to_string()),
+      "Update package.json"
+    );
   }
 
   #[test]
@@ -214,7 +217,9 @@ mod tests {
   #[test]
   fn unwrap_nested_title_unwraps_double_nesting() {
     assert_eq!(
-      unwrap_nested_title(r#"{"title": "{\"title\": \"Update package.json\"}"}"#.to_string()),
+      unwrap_nested_title(
+        r#"{"title": "{\"title\": \"Update package.json\"}"}"#.to_string()
+      ),
       "Update package.json"
     );
   }

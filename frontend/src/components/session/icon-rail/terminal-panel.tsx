@@ -1,8 +1,8 @@
-import {useEffect, useRef} from "react"
-import {FitAddon, init, Terminal} from "ghostty-web"
-import {api} from "@/lib/api"
-import {resolveMonoFont, resolveMonoFontSize} from "@/lib/appearance"
-import {useSettings} from "@/lib/queries"
+import { useEffect, useRef } from "react"
+import { FitAddon, init, Terminal } from "ghostty-web"
+import { api } from "@/lib/api"
+import { resolveMonoFont, resolveMonoFontSize } from "@/lib/appearance"
+import { useSettings } from "@/lib/queries"
 
 const RECONNECT_DELAY_MS = 2000
 

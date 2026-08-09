@@ -1,10 +1,10 @@
-import {useRef, useState} from "react"
-import {AnimatePresence, motion, useReducedMotion} from "motion/react"
-import {GitBranch, SquareTerminal} from "lucide-react"
-import {TooltipIcon} from "@/components/tooltip-icon.tsx"
-import {EASE_DRAWER} from "@/lib/ease.ts"
-import {cn} from "@/lib/utils.ts"
-import {TerminalPanel} from "./terminal-panel.tsx"
+import { useRef, useState } from "react"
+import { AnimatePresence, motion, useReducedMotion } from "motion/react"
+import { GitBranch, SquareTerminal } from "lucide-react"
+import { TooltipIcon } from "@/components/tooltip-icon.tsx"
+import { EASE_DRAWER } from "@/lib/ease.ts"
+import { cn } from "@/lib/utils.ts"
+import { TerminalPanel } from "./terminal-panel.tsx"
 
 function GithubIcon({ className }: { className?: string }) {
   return (
