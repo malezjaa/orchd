@@ -1,6 +1,9 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
+import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { FolderTree, GitBranch, SquareTerminal } from "lucide-react"
 import { TooltipIcon } from "@/components/tooltip-icon.tsx"
+import { EASE_DRAWER } from "@/lib/ease.ts"
+import { cn } from "@/lib/utils.ts"
 
 function GithubIcon({ className }: { className?: string }) {
   return (
@@ -44,24 +47,151 @@ const RAIL_ACTIONS: RailAction[] = [
   },
 ]
 
+const PANEL_MIN_WIDTH = 200
+const PANEL_MAX_WIDTH = 480
+const PANEL_DEFAULT_WIDTH = 288
+const PANEL_WIDTH_STORAGE_KEY = "session-panel:width"
+
+function clampPanelWidth(width: number) {
+  return Math.min(PANEL_MAX_WIDTH, Math.max(PANEL_MIN_WIDTH, width))
+}
+
+function getStoredPanelWidth() {
+  const stored = window.localStorage.getItem(PANEL_WIDTH_STORAGE_KEY)
+  const parsed = stored ? Number(stored) : Number.NaN
+  return Number.isFinite(parsed)
+    ? clampPanelWidth(parsed)
+    : PANEL_DEFAULT_WIDTH
+}
+
+const PANEL_TRANSITION = {
+  duration: 0.3,
+  ease: EASE_DRAWER,
+} as const
+
+const PANEL_CLOSED = { width: 0, opacity: 0 }
+
 export function SessionIconRail() {
   const [active, setActive] = useState<string | null>(null)
+  const [width, setWidthState] = useState(getStoredPanelWidth)
+  const [resizing, setResizing] = useState(false)
+  const reduce = useReducedMotion() ?? false
+
+  const draggingRef = useRef(false)
+  const draggedRef = useRef(false)
+  const startXRef = useRef(0)
+  const startWidthRef = useRef(0)
+
+  const handleClick = (id: string) =>
+    setActive((current) => (current === id ? null : id))
+
+  const activeAction = RAIL_ACTIONS.find((action) => action.id === active)
+
+  const setWidth = (nextWidth: number) => {
+    const clamped = clampPanelWidth(nextWidth)
+    setWidthState(clamped)
+    window.localStorage.setItem(PANEL_WIDTH_STORAGE_KEY, String(clamped))
+  }
+
+  const handleResizePointerDown = (
+    event: React.PointerEvent<HTMLButtonElement>
+  ) => {
+    if (event.button !== 0) return
+    draggingRef.current = true
+    draggedRef.current = false
+    startXRef.current = event.clientX
+    startWidthRef.current = width
+    event.currentTarget.setPointerCapture(event.pointerId)
+    setResizing(true)
+    document.body.style.cursor = "col-resize"
+    document.body.style.userSelect = "none"
+  }
+
+  const handleResizePointerMove = (
+    event: React.PointerEvent<HTMLButtonElement>
+  ) => {
+    if (!draggingRef.current) return
+    // Panel sits on the right edge, so dragging leftward grows it.
+    const delta = startXRef.current - event.clientX
+    if (Math.abs(delta) > 2) draggedRef.current = true
+    setWidth(startWidthRef.current + delta)
+  }
+
+  const endResizeDrag = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (!draggingRef.current) return
+    draggingRef.current = false
+    setResizing(false)
+    document.body.style.cursor = ""
+    document.body.style.userSelect = ""
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+  }
+
+  const panelTransition = reduce || resizing
+    ? { duration: 0 }
+    : PANEL_TRANSITION
 
   return (
-    <aside
-      aria-label="Session tools"
-      className="flex w-11 shrink-0 flex-col items-center gap-1 border-l border-border py-3"
-    >
-      {RAIL_ACTIONS.map(({ id, label, icon }) => (
-        <TooltipIcon
-          key={id}
-          label={label}
-          active={active === id}
-          onClick={() => setActive((current) => (current === id ? null : id))}
-        >
-          {icon({ className: "size-4" })}
-        </TooltipIcon>
-      ))}
-    </aside>
+    <div className="flex min-h-0 shrink-0">
+      <AnimatePresence initial={false}>
+        {activeAction ? (
+          <motion.aside
+            key={activeAction.id}
+            aria-label={`${activeAction.label} panel`}
+            initial={PANEL_CLOSED}
+            animate={{ width, opacity: 1 }}
+            exit={PANEL_CLOSED}
+            transition={panelTransition}
+            className={cn(
+              "relative flex min-h-0 shrink-0 flex-col overflow-hidden bg-background"
+            )}
+          >
+            <button
+              type="button"
+              aria-label={`Resize ${activeAction.label} panel`}
+              tabIndex={-1}
+              onPointerDown={handleResizePointerDown}
+              onPointerMove={handleResizePointerMove}
+              onPointerUp={endResizeDrag}
+              onPointerCancel={endResizeDrag}
+              className="absolute inset-y-0 left-0 z-20 w-1.5 cursor-col-resize outline-none after:absolute after:inset-y-0 after:left-1/2 after:w-px after:-translate-x-1/2 after:bg-transparent after:transition-colors hover:after:bg-border"
+            />
+            <div className="flex h-12 shrink-0 items-center gap-2.5 border-l border-b border-border px-4">
+              <span
+                aria-hidden="true"
+                className="grid size-4 shrink-0 place-items-center text-muted-foreground"
+              >
+                {activeAction.icon({ className: "size-4" })}
+              </span>
+              <p className="text-xs font-medium text-foreground">
+                {activeAction.label}
+              </p>
+            </div>
+            <div className="grid min-h-0 flex-1 place-items-center border-l border-border px-4 py-6">
+              <p className="text-center text-xs text-muted-foreground">
+                {activeAction.label} panel coming soon
+              </p>
+            </div>
+          </motion.aside>
+        ) : null}
+      </AnimatePresence>
+
+      <aside
+        aria-label="Session tools"
+        className="flex w-11 shrink-0 flex-col items-center gap-1 border-l border-border py-3"
+      >
+        {RAIL_ACTIONS.map(({ id, label, icon }) => (
+          <TooltipIcon
+            key={id}
+            label={label}
+            active={active === id}
+            onClick={() => handleClick(id)}
+          >
+            {icon({ className: "size-4" })}
+          </TooltipIcon>
+        ))}
+      </aside>
+    </div>
   )
 }
