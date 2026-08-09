@@ -197,7 +197,7 @@ export function useAnimatedSidebar() {
   return context
 }
 
-function useAnimatedSidebarPanel() {
+export function useAnimatedSidebarPanel() {
   const context = useContext(AnimatedSidebarPanelContext)
   if (!context) {
     throw new Error(

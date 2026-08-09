@@ -14,7 +14,7 @@ import { AnimatedSidebarTrigger } from "@/components/motion/animated-sidebar"
 import { MessageGroup, MessageScroller } from "@/components/agents/message"
 import { SessionComposer } from "@/components/session/session-composer"
 import { SessionHeader } from "@/components/session/session-header"
-import { SessionIconRail } from "@/components/session/session-icon-rail"
+import { SessionIconRail } from "@/components/session/icon-rail/session-icon-rail"
 import { TimelineItem } from "@/components/session/timeline-item"
 import { TurnWork } from "@/components/session/turn-work"
 import {
@@ -515,7 +515,7 @@ export function SessionPanel({
           />
         </div>
 
-        <SessionIconRail />
+        <SessionIconRail sessionId={session.id} />
       </div>
     </div>
   )

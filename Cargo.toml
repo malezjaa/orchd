@@ -66,6 +66,7 @@ tower_governor = "0.8"
 
 command-group = { version = "5", features = ["with-tokio"] }
 nix = { version = "0.29", features = ["signal", "process"] }
+portable-pty = "0.9"
 
 clap = { version = "4", features = ["derive"] }
 

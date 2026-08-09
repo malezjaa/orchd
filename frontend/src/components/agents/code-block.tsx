@@ -18,6 +18,7 @@ import {
   useAgentCodeTokens,
 } from "@/components/agents/agent-code"
 import { SPRING_PRESS } from "@/lib/ease"
+import { useCodeTheme } from "@/lib/queries"
 import { cn } from "@/lib/utils"
 
 export type CodeBlockStatus = "streaming" | "complete"
@@ -54,7 +55,7 @@ export function CodeBlock({
   const copyTimer = useRef<number | undefined>(undefined)
   const [copied, setCopied] = useState(false)
   const streaming = status === "streaming"
-  const tokens = useAgentCodeTokens(code, language)
+  const tokens = useAgentCodeTokens(code, language, useCodeTheme())
   const highlighted = useMemo(() => new Set(highlightLines), [highlightLines])
   let offset = 0
   const lines = code.split("\n").map((content) => {

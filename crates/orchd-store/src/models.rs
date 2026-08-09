@@ -121,6 +121,38 @@ pub struct ClientSessionRecord {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SettingsRecord {
+  pub interface_font: Option<String>,
+  pub interface_font_size: Option<String>,
+  pub mono_font: Option<String>,
+  pub mono_font_size: Option<String>,
+  pub time_format: Option<String>,
+  pub code_theme: Option<String>,
+  #[serde(with = "time::serde::rfc3339")]
+  pub updated_at: OffsetDateTime,
+}
+
+/// A partial update to `SettingsRecord`. Each field is `Option<Option<_>>`
+/// so the outer `None` means "leave this setting alone" while `Some(None)`
+/// means "clear it back to the default", a plain `Option<String>` can't
+/// tell those two apart.
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct SettingsPatch {
+  #[serde(default)]
+  pub interface_font: Option<Option<String>>,
+  #[serde(default)]
+  pub interface_font_size: Option<Option<String>>,
+  #[serde(default)]
+  pub mono_font: Option<Option<String>>,
+  #[serde(default)]
+  pub mono_font_size: Option<Option<String>>,
+  #[serde(default)]
+  pub time_format: Option<Option<String>>,
+  #[serde(default)]
+  pub code_theme: Option<Option<String>>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SessionRecord {
   pub id: SessionId,
   pub agent_kind: AgentKind,

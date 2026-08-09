@@ -19,6 +19,7 @@ import {
 } from "@/components/agents/agent-code"
 import { AgentDisclosure } from "@/components/agents/agent-disclosure"
 import { SPRING_PRESS, SPRING_SWAP } from "@/lib/ease"
+import { useCodeTheme } from "@/lib/queries"
 import { cn } from "@/lib/utils"
 
 export type FileDiffStatus = "streaming" | "complete"
@@ -99,7 +100,7 @@ export function FileDiff({
   const deletions = lines.filter((line) => line.type === "removed").length
   const canCopy = Boolean(copyText || onCopy)
   const code = lines.map((line) => line.content).join("\n")
-  const tokens = useAgentCodeTokens(code, language)
+  const tokens = useAgentCodeTokens(code, language, useCodeTheme())
 
   const setOpen = useCallback(
     (next: boolean) => {

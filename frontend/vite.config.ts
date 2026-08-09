@@ -168,6 +168,7 @@ export default defineConfig({
       "/sessions": { target: ORCHD_TARGET, ws: true },
       "/fs": ORCHD_TARGET,
       "/models": ORCHD_TARGET,
+      "/settings": ORCHD_TARGET,
     },
     port: 3000,
   },

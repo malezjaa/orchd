@@ -4,6 +4,7 @@ import { FolderTree, GitBranch, SquareTerminal } from "lucide-react"
 import { TooltipIcon } from "@/components/tooltip-icon.tsx"
 import { EASE_DRAWER } from "@/lib/ease.ts"
 import { cn } from "@/lib/utils.ts"
+import { TerminalPanel } from "./terminal-panel.tsx"
 
 function GithubIcon({ className }: { className?: string }) {
   return (
@@ -22,6 +23,7 @@ interface RailAction {
   id: string
   label: string
   icon: (props: { className?: string }) => React.ReactNode
+  render: (sessionId: string | null) => React.ReactNode
 }
 
 const RAIL_ACTIONS: RailAction[] = [
@@ -29,21 +31,26 @@ const RAIL_ACTIONS: RailAction[] = [
     id: "git",
     label: "Git",
     icon: (p) => <GitBranch className={p.className} />,
+    render: () => {},
   },
   {
     id: "github",
     label: "GitHub",
     icon: (p) => <GithubIcon className={p.className} />,
+    render: () => {},
   },
   {
     id: "files",
     label: "Files",
     icon: (p) => <FolderTree className={p.className} />,
+    render: () => {},
   },
   {
-    id: "console",
-    label: "Console",
+    id: "terminal",
+    label: "Terminal",
     icon: (p) => <SquareTerminal className={p.className} />,
+    render: (sessionId) =>
+      sessionId ? <TerminalPanel sessionId={sessionId} /> : null,
   },
 ]
 
@@ -59,9 +66,7 @@ function clampPanelWidth(width: number) {
 function getStoredPanelWidth() {
   const stored = window.localStorage.getItem(PANEL_WIDTH_STORAGE_KEY)
   const parsed = stored ? Number(stored) : Number.NaN
-  return Number.isFinite(parsed)
-    ? clampPanelWidth(parsed)
-    : PANEL_DEFAULT_WIDTH
+  return Number.isFinite(parsed) ? clampPanelWidth(parsed) : PANEL_DEFAULT_WIDTH
 }
 
 const PANEL_TRANSITION = {
@@ -71,14 +76,13 @@ const PANEL_TRANSITION = {
 
 const PANEL_CLOSED = { width: 0, opacity: 0 }
 
-export function SessionIconRail() {
+export function SessionIconRail({ sessionId }: { sessionId: string | null }) {
   const [active, setActive] = useState<string | null>(null)
   const [width, setWidthState] = useState(getStoredPanelWidth)
   const [resizing, setResizing] = useState(false)
   const reduce = useReducedMotion() ?? false
 
   const draggingRef = useRef(false)
-  const draggedRef = useRef(false)
   const startXRef = useRef(0)
   const startWidthRef = useRef(0)
 
@@ -98,7 +102,6 @@ export function SessionIconRail() {
   ) => {
     if (event.button !== 0) return
     draggingRef.current = true
-    draggedRef.current = false
     startXRef.current = event.clientX
     startWidthRef.current = width
     event.currentTarget.setPointerCapture(event.pointerId)
@@ -113,7 +116,6 @@ export function SessionIconRail() {
     if (!draggingRef.current) return
     // Panel sits on the right edge, so dragging leftward grows it.
     const delta = startXRef.current - event.clientX
-    if (Math.abs(delta) > 2) draggedRef.current = true
     setWidth(startWidthRef.current + delta)
   }
 
@@ -128,9 +130,8 @@ export function SessionIconRail() {
     }
   }
 
-  const panelTransition = reduce || resizing
-    ? { duration: 0 }
-    : PANEL_TRANSITION
+  const panelTransition =
+    reduce || resizing ? { duration: 0 } : PANEL_TRANSITION
 
   return (
     <div className="flex min-h-0 shrink-0">
@@ -157,7 +158,7 @@ export function SessionIconRail() {
               onPointerCancel={endResizeDrag}
               className="absolute inset-y-0 left-0 z-20 w-1.5 cursor-col-resize outline-none after:absolute after:inset-y-0 after:left-1/2 after:w-px after:-translate-x-1/2 after:bg-transparent after:transition-colors hover:after:bg-border"
             />
-            <div className="flex h-12 shrink-0 items-center gap-2.5 border-l border-b border-border px-4">
+            <div className="flex h-12 shrink-0 items-center gap-2.5 border-b border-l border-border px-4">
               <span
                 aria-hidden="true"
                 className="grid size-4 shrink-0 place-items-center text-muted-foreground"
@@ -168,10 +169,17 @@ export function SessionIconRail() {
                 {activeAction.label}
               </p>
             </div>
-            <div className="grid min-h-0 flex-1 place-items-center border-l border-border px-4 py-6">
-              <p className="text-center text-xs text-muted-foreground">
-                {activeAction.label} panel coming soon
-              </p>
+            <div className="grid min-h-0 flex-1 border-l border-border">
+              {activeAction.render(sessionId) ?? (
+                <p
+                  className="m-auto max-w-[200px] px-4 py-6 text-center text-xs text-muted-foreground"
+                  id={`${activeAction.label}-panel`}
+                >
+                  {sessionId
+                    ? `${activeAction.label} coming soon`
+                    : "Available once the session is created"}
+                </p>
+              )}
             </div>
           </motion.aside>
         ) : null}

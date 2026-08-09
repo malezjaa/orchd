@@ -13,6 +13,8 @@ tokio-stream.workspace = true
 futures.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+anyhow.workspace = true
+portable-pty.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 command-group.workspace = true

@@ -72,6 +72,28 @@ export interface ProjectRecord {
   updated_at: string
 }
 
+export interface SettingsRecord {
+  interface_font: string | null
+  interface_font_size: string | null
+  mono_font: string | null
+  mono_font_size: string | null
+  time_format: string | null
+  code_theme: string | null
+  updated_at: string
+}
+
+export interface SettingsPatch {
+  interface_font?: string | null
+  interface_font_size?: string | null
+  mono_font?: string | null
+  mono_font_size?: string | null
+  time_format?: string | null
+  code_theme?: string | null
+}
+
+// Bump alongside the workspace version in the root Cargo.toml when cutting a release.
+export const APP_VERSION = "0.1.0"
+
 export interface FsEntry {
   name: string
   path: string

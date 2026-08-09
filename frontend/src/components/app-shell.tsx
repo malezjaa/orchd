@@ -18,6 +18,7 @@ import {
   type DraftSession,
   SessionPanel,
 } from "@/components/session/session-panel"
+import { SettingsEffects } from "@/components/settings/settings-effects"
 import { useTheme } from "@/components/theme-provider"
 import type { AgentKind, ProjectRecord, SessionRecord } from "@/lib/orchd"
 import { useArchivedSessions, useProjects, useSessions } from "@/lib/queries"
@@ -58,6 +59,7 @@ export function AppShell() {
 
   return (
     <AnimatedSidebarProvider className="h-svh overflow-hidden">
+      <SettingsEffects />
       <AppSidebar
         sessions={sessions}
         projects={projects}

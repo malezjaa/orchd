@@ -74,6 +74,7 @@ export const SharedLayoutBg = forwardRef<HTMLElement, SharedLayoutBgProps>(
         const el = child as ReactElement<{
           className?: string
           onMouseEnter?: () => void
+          onMouseOver?: (event: MouseEvent<HTMLElement>) => void
           children?: ReactNode
         }>
         const childKey = el.key ? String(el.key) : `item-${index}`

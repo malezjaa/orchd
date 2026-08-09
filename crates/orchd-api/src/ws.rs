@@ -6,15 +6,32 @@ use axum::{
     Path, Query, State,
     ws::{Message, WebSocket, WebSocketUpgrade},
   },
+  http::StatusCode,
   response::{IntoResponse, Response},
   routing::get,
 };
 use futures::{SinkExt, StreamExt};
 use orchd_core::{SessionCommand, SessionEvent, SessionId};
+use orchd_store::Store;
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 
 use crate::state::AppState;
+
+/// Pre-flight shared by the WS routes: consumes the single-use ticket and maps
+/// the outcome to the HTTP status the handler should return. Browser sockets
+/// can't carry a bearer/cookie header, so every WS upgrade funnels through
+/// this same short-lived, session-gated ticket check.
+pub(crate) async fn verify_ws_ticket(
+  store: &Store,
+  ticket: &str,
+) -> Result<(), StatusCode> {
+  match store.consume_ws_ticket(ticket).await {
+    Ok(Some(_)) => Ok(()),
+    Ok(None) => Err(StatusCode::UNAUTHORIZED),
+    Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+  }
+}
 
 pub fn router() -> Router<AppState> {
   Router::new().route("/sessions/{id}/ws", get(handler))
@@ -73,12 +90,10 @@ async fn handler(
   };
 
   let Some(ticket) = auth.ticket else {
-    return axum::http::StatusCode::UNAUTHORIZED.into_response();
+    return StatusCode::UNAUTHORIZED.into_response();
   };
-  match state.registry.store().consume_ws_ticket(&ticket).await {
-    Ok(Some(_)) => {}
-    Ok(None) => return axum::http::StatusCode::UNAUTHORIZED.into_response(),
-    Err(_) => return axum::http::StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+  if let Err(status) = verify_ws_ticket(state.registry.store(), &ticket).await {
+    return status.into_response();
   }
 
   // Respawns an actor for a session that exists in the store but has none

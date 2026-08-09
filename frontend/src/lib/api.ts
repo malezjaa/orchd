@@ -10,6 +10,8 @@ import type {
   ModelInfo,
   ProjectRecord,
   SessionRecord,
+  SettingsPatch,
+  SettingsRecord,
 } from "@/lib/orchd"
 
 export class ApiError extends Error {
@@ -106,4 +108,12 @@ export const api = {
     ),
 
   listModels: () => request<ModelInfo[]>("/models"),
+
+  getSettings: () => request<SettingsRecord>("/settings"),
+
+  updateSettings: (patch: SettingsPatch) =>
+    request<SettingsRecord>("/settings", {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }),
 }

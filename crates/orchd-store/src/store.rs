@@ -17,7 +17,7 @@ use crate::{
   error::StoreError,
   models::{
     ApprovalStatus, ClientSessionRecord, ProjectRecord, SessionRecord, SessionStatus,
-    agent_kind_from_sql, agent_kind_to_sql,
+    SettingsPatch, SettingsRecord, agent_kind_from_sql, agent_kind_to_sql,
   },
 };
 
@@ -667,6 +667,87 @@ impl Store {
     Ok(original_count - folded_count)
   }
 
+  /// Returns the single settings row, creating it with all-default (`NULL`)
+  /// fields on first access rather than requiring a seed row from the
+  /// migration itself.
+  pub async fn get_settings(&self) -> Result<SettingsRecord, StoreError> {
+    let row = sqlx::query(
+      "SELECT interface_font, interface_font_size, mono_font, mono_font_size, \
+       time_format, code_theme, updated_at FROM settings WHERE id = 1",
+    )
+    .fetch_optional(&self.pool)
+    .await?;
+
+    if let Some(row) = row {
+      return Ok(row_to_settings(&row));
+    }
+
+    let now = OffsetDateTime::now_utc();
+    sqlx::query(
+      "INSERT INTO settings (id, interface_font, interface_font_size, mono_font, \
+       mono_font_size, time_format, code_theme, updated_at)
+             VALUES (1, NULL, NULL, NULL, NULL, NULL, NULL, ?1)
+             ON CONFLICT(id) DO NOTHING",
+    )
+    .bind(now.unix_timestamp())
+    .execute(&self.pool)
+    .await?;
+
+    Ok(SettingsRecord {
+      interface_font: None,
+      interface_font_size: None,
+      mono_font: None,
+      mono_font_size: None,
+      time_format: None,
+      code_theme: None,
+      updated_at: now,
+    })
+  }
+
+  /// Applies a partial patch: fields left `None` in `patch` keep their
+  /// current stored value, mirroring `SessionCommand::UpdatePolicy`'s patch
+  /// semantics rather than requiring the full settings object on every
+  /// call.
+  pub async fn update_settings(
+    &self,
+    patch: SettingsPatch,
+  ) -> Result<SettingsRecord, StoreError> {
+    let current = self.get_settings().await?;
+    let next = SettingsRecord {
+      interface_font: patch.interface_font.unwrap_or(current.interface_font),
+      interface_font_size: patch
+        .interface_font_size
+        .unwrap_or(current.interface_font_size),
+      mono_font: patch.mono_font.unwrap_or(current.mono_font),
+      mono_font_size: patch.mono_font_size.unwrap_or(current.mono_font_size),
+      time_format: patch.time_format.unwrap_or(current.time_format),
+      code_theme: patch.code_theme.unwrap_or(current.code_theme),
+      updated_at: OffsetDateTime::now_utc(),
+    };
+
+    sqlx::query(
+      "INSERT INTO settings (id, interface_font, interface_font_size, mono_font, \
+       mono_font_size, time_format, code_theme, updated_at)
+             VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7)
+             ON CONFLICT(id) DO UPDATE SET interface_font = excluded.interface_font, \
+       interface_font_size = excluded.interface_font_size, mono_font = \
+       excluded.mono_font, mono_font_size = excluded.mono_font_size, time_format = \
+       excluded.time_format, code_theme = excluded.code_theme, updated_at = \
+       excluded.updated_at",
+    )
+    .bind(&next.interface_font)
+    .bind(&next.interface_font_size)
+    .bind(&next.mono_font)
+    .bind(&next.mono_font_size)
+    .bind(&next.time_format)
+    .bind(&next.code_theme)
+    .bind(next.updated_at.unix_timestamp())
+    .execute(&self.pool)
+    .await?;
+
+    Ok(next)
+  }
+
   // ---- Auth: pairing tokens, client sessions, WS tickets ---------------
   //
   // Only token *hashes* are ever persisted: a raw token is generated, its
@@ -938,6 +1019,20 @@ fn row_to_project(row: &sqlx::sqlite::SqliteRow) -> ProjectRecord {
   }
 }
 
+fn row_to_settings(row: &sqlx::sqlite::SqliteRow) -> SettingsRecord {
+  let updated_at: i64 = row.get("updated_at");
+  SettingsRecord {
+    interface_font: row.get("interface_font"),
+    interface_font_size: row.get("interface_font_size"),
+    mono_font: row.get("mono_font"),
+    mono_font_size: row.get("mono_font_size"),
+    time_format: row.get("time_format"),
+    code_theme: row.get("code_theme"),
+    updated_at: OffsetDateTime::from_unix_timestamp(updated_at)
+      .expect("valid updated_at timestamp"),
+  }
+}
+
 fn row_to_client_session(row: &sqlx::sqlite::SqliteRow) -> ClientSessionRecord {
   let created_at: i64 = row.get("created_at");
   let last_seen_at: i64 = row.get("last_seen_at");
@@ -1018,6 +1113,44 @@ mod tests {
 
     let listed = store.list_sessions().await.expect("list");
     assert_eq!(listed[0].title.as_deref(), Some("Explore canvas-ui registry components"));
+  }
+
+  #[tokio::test]
+  async fn settings_default_then_patch_round_trips() {
+    let store = Store::connect("sqlite::memory:").await.expect("connect");
+
+    let defaults = store.get_settings().await.expect("get_settings");
+    assert_eq!(defaults.interface_font, None);
+    assert_eq!(defaults.mono_font_size, None);
+    assert_eq!(defaults.code_theme, None);
+
+    let updated = store
+      .update_settings(SettingsPatch {
+        interface_font: Some(Some("geist".to_string())),
+        mono_font_size: None,
+        code_theme: Some(Some("gruvbox".to_string())),
+        ..Default::default()
+      })
+      .await
+      .expect("update_settings");
+    assert_eq!(updated.interface_font.as_deref(), Some("geist"));
+    assert_eq!(updated.mono_font_size, None);
+    assert_eq!(updated.code_theme.as_deref(), Some("gruvbox"));
+
+    // A field left `None` in the patch keeps its previously stored value.
+    let reloaded = store.get_settings().await.expect("get_settings");
+    assert_eq!(reloaded.interface_font.as_deref(), Some("geist"));
+
+    // `Some(None)` explicitly clears a field back to unset.
+    let cleared = store
+      .update_settings(SettingsPatch {
+        interface_font: Some(None),
+        ..Default::default()
+      })
+      .await
+      .expect("update_settings");
+    assert_eq!(cleared.interface_font, None);
+    assert_eq!(cleared.code_theme.as_deref(), Some("gruvbox"));
   }
 }
 

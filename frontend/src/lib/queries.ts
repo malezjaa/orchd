@@ -1,13 +1,72 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "@/lib/api"
 import { setAuthToken, useAuthToken } from "@/lib/auth"
-import type { AgentKind, ProjectRecord, SessionRecord } from "@/lib/orchd"
+import { DEFAULT_CODE_THEME } from "@/lib/code-themes"
+import type {
+  AgentKind,
+  ProjectRecord,
+  SessionRecord,
+  SettingsPatch,
+  SettingsRecord,
+} from "@/lib/orchd"
 
 export const queryKeys = {
   projects: ["projects"] as const,
   sessions: ["sessions"] as const,
   archivedSessions: ["sessions", "archived"] as const,
   models: ["models"] as const,
+  settings: ["settings"] as const,
+}
+
+export function useSettings() {
+  const token = useAuthToken()
+  return useQuery({
+    queryKey: queryKeys.settings,
+    queryFn: api.getSettings,
+    enabled: token !== null,
+    staleTime: Infinity,
+  })
+}
+
+/// The resolved code block theme key, defaulting to `DEFAULT_CODE_THEME` when
+/// the setting is unset or settings haven't loaded yet.
+export function useCodeTheme(): string {
+  const { data: settings } = useSettings()
+  return settings?.code_theme ?? DEFAULT_CODE_THEME
+}
+
+export function useUpdateSettings() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (patch: SettingsPatch) => api.updateSettings(patch),
+    // Applied optimistically so a picker (and anything reading the same
+    // setting live, like the code block preview) updates the instant a user
+    // makes a choice, rather than waiting on the round trip.
+    onMutate: async (patch) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.settings })
+      const previous = queryClient.getQueryData<SettingsRecord>(
+        queryKeys.settings
+      )
+      if (previous) {
+        queryClient.setQueryData<SettingsRecord>(queryKeys.settings, {
+          ...previous,
+          ...patch,
+        })
+      }
+      return { previous }
+    },
+    onError: (_err, _patch, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData<SettingsRecord>(
+          queryKeys.settings,
+          context.previous
+        )
+      }
+    },
+    onSuccess: (record) => {
+      queryClient.setQueryData<SettingsRecord>(queryKeys.settings, record)
+    },
+  })
 }
 
 // The catalog is hardcoded server-side and never changes at runtime.

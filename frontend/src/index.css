@@ -5,6 +5,17 @@
 @import "@fontsource-variable/geist-mono";
 @import "./typeset.css";
 
+/* Self-hosted fallback for terminal glyphs (branch/folder icons, etc.) from
+   the Private Use Area that no regular typeface covers. Bundling it means
+   those render even when no Nerd Font is installed on the machine. */
+@font-face {
+  font-family: "Symbols Nerd Font Mono";
+  src: url("./assets/fonts/SymbolsNerdFontMono-Regular.woff2") format("woff2");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 :root {
@@ -15,34 +26,36 @@
   --popover: oklch(0.9911 0 0);
   --popover-foreground: oklch(0.2435 0 0);
   --primary: oklch(0.3732 0.0328 41.8087);
-  --primary-foreground: oklch(1.0000 0 0);
+  --primary-foreground: oklch(1 0 0);
   --secondary: oklch(0.8341 0.1342 71.2466);
   --secondary-foreground: oklch(0.3027 0.0564 41.3732);
   --muted: oklch(0.9521 0 0);
   --muted-foreground: oklch(0.5032 0 0);
-  --accent: oklch(0.9310 0 0);
+  --accent: oklch(0.931 0 0);
   --accent-foreground: oklch(0.2435 0 0);
   --destructive: oklch(0.5447 0.1842 33.0495);
-  --destructive-foreground: oklch(1.0000 0 0);
+  --destructive-foreground: oklch(1 0 0);
   --border: oklch(0.8822 0 0);
   --input: oklch(0.8822 0 0);
   --ring: oklch(0.3732 0.0328 41.8087);
   --chart-1: oklch(0.3732 0.0328 41.8087);
   --chart-2: oklch(0.8341 0.1342 71.2466);
-  --chart-3: oklch(0.9310 0 0);
-  --chart-4: oklch(0.8485 0.1260 73.2404);
+  --chart-3: oklch(0.931 0 0);
+  --chart-4: oklch(0.8485 0.126 73.2404);
   --chart-5: oklch(0.3732 0.0369 39.2164);
   --sidebar: oklch(0.9881 0 0);
   --sidebar-foreground: oklch(0.2645 0 0);
-  --sidebar-primary: oklch(0.3250 0 0);
+  --sidebar-primary: oklch(0.325 0 0);
   --sidebar-primary-foreground: oklch(0.9881 0 0);
   --sidebar-accent: oklch(0.9761 0 0);
-  --sidebar-accent-foreground: oklch(0.3250 0 0);
+  --sidebar-accent-foreground: oklch(0.325 0 0);
   --sidebar-border: oklch(0.9401 0 0);
   --sidebar-ring: oklch(0.7731 0 0);
-  --font-sans: Geist, ui-sans-serif, sans-serif, system-ui;
+  --font-sans:
+    var(--settings-font-sans, Geist), ui-sans-serif, sans-serif, system-ui;
   --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
-  --font-mono: JetBrains Mono, ui-monospace, monospace;
+  --font-mono:
+    var(--settings-font-mono, "Geist Mono Variable"), ui-monospace, monospace;
   --radius: 0.5rem;
   --shadow-x: 0;
   --shadow-y: 1px;
@@ -52,11 +65,16 @@
   --shadow-color: oklch(0 0 0);
   --shadow-2xs: 0 1px 5px 0px hsl(0 0% 0% / 0.07);
   --shadow-xs: 0 1px 5px 0px hsl(0 0% 0% / 0.07);
-  --shadow-sm: 0 1px 5px 0px hsl(0 0% 0% / 0.15), 0 1px 2px -1px hsl(0 0% 0% / 0.15);
-  --shadow: 0 1px 5px 0px hsl(0 0% 0% / 0.15), 0 1px 2px -1px hsl(0 0% 0% / 0.15);
-  --shadow-md: 0 1px 5px 0px hsl(0 0% 0% / 0.15), 0 2px 4px -1px hsl(0 0% 0% / 0.15);
-  --shadow-lg: 0 1px 5px 0px hsl(0 0% 0% / 0.15), 0 4px 6px -1px hsl(0 0% 0% / 0.15);
-  --shadow-xl: 0 1px 5px 0px hsl(0 0% 0% / 0.15), 0 8px 10px -1px hsl(0 0% 0% / 0.15);
+  --shadow-sm:
+    0 1px 5px 0px hsl(0 0% 0% / 0.15), 0 1px 2px -1px hsl(0 0% 0% / 0.15);
+  --shadow:
+    0 1px 5px 0px hsl(0 0% 0% / 0.15), 0 1px 2px -1px hsl(0 0% 0% / 0.15);
+  --shadow-md:
+    0 1px 5px 0px hsl(0 0% 0% / 0.15), 0 2px 4px -1px hsl(0 0% 0% / 0.15);
+  --shadow-lg:
+    0 1px 5px 0px hsl(0 0% 0% / 0.15), 0 4px 6px -1px hsl(0 0% 0% / 0.15);
+  --shadow-xl:
+    0 1px 5px 0px hsl(0 0% 0% / 0.15), 0 8px 10px -1px hsl(0 0% 0% / 0.15);
   --shadow-2xl: 0 1px 5px 0px hsl(0 0% 0% / 0.38);
   --tracking-normal: 0em;
   --spacing: 0.25rem;
@@ -70,34 +88,36 @@
   --popover: oklch(0.2134 0 0);
   --popover-foreground: oklch(0.9491 0 0);
   --primary: oklch(0.8225 0.1276 63.3087);
-  --primary-foreground: oklch(0.2490 0.0317 198.7326);
-  --secondary: oklch(0.2756 0.0162 58.8980);
+  --primary-foreground: oklch(0.249 0.0317 198.7326);
+  --secondary: oklch(0.2756 0.0162 58.898);
   --secondary-foreground: oklch(0.8225 0.1276 63.3087);
-  --muted: oklch(0.2520 0 0);
+  --muted: oklch(0.252 0 0);
   --muted-foreground: oklch(0.7699 0 0);
-  --accent: oklch(0.2850 0 0);
+  --accent: oklch(0.285 0 0);
   --accent-foreground: oklch(0.9491 0 0);
   --destructive: oklch(0.5447 0.1842 33.0495);
-  --destructive-foreground: oklch(1.0000 0 0);
+  --destructive-foreground: oklch(1 0 0);
   --border: oklch(0.2226 0.0099 88.7963);
   --input: oklch(0.4017 0 0);
   --ring: oklch(0.8225 0.1276 63.3087);
   --chart-1: oklch(0.8225 0.1276 63.3087);
-  --chart-2: oklch(0.2756 0.0162 58.8980);
-  --chart-3: oklch(0.2850 0 0);
+  --chart-2: oklch(0.2756 0.0162 58.898);
+  --chart-3: oklch(0.285 0 0);
   --chart-4: oklch(0.3033 0.0182 67.0499);
   --chart-5: oklch(0.8242 0.1282 64.3771);
   --sidebar: oklch(0.2103 0.0059 285.8852);
   --sidebar-foreground: oklch(0.8124 0.0069 286.2443);
-  --sidebar-primary: oklch(0.4165 0.1822 264.5260);
-  --sidebar-primary-foreground: oklch(1.0000 0 0);
+  --sidebar-primary: oklch(0.4165 0.1822 264.526);
+  --sidebar-primary-foreground: oklch(1 0 0);
   --sidebar-accent: oklch(0.2405 0.0057 285.9664);
   --sidebar-accent-foreground: oklch(0.8124 0.0069 286.2443);
   --sidebar-border: oklch(0.2405 0.0057 285.9664);
   --sidebar-ring: oklch(0.7309 0.0114 286.1138);
-  --font-sans: Geist, ui-sans-serif, sans-serif, system-ui;
+  --font-sans:
+    var(--settings-font-sans, Geist), ui-sans-serif, sans-serif, system-ui;
   --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
-  --font-mono: JetBrains Mono, ui-monospace, monospace;
+  --font-mono:
+    var(--settings-font-mono, "Geist Mono Variable"), ui-monospace, monospace;
   --radius: 0.5rem;
   --shadow-x: 0;
   --shadow-y: 1px;
@@ -107,11 +127,16 @@
   --shadow-color: oklch(0 0 0);
   --shadow-2xs: 0 1px 5px 0px hsl(0 0% 0% / 0.07);
   --shadow-xs: 0 1px 5px 0px hsl(0 0% 0% / 0.07);
-  --shadow-sm: 0 1px 5px 0px hsl(0 0% 0% / 0.15), 0 1px 2px -1px hsl(0 0% 0% / 0.15);
-  --shadow: 0 1px 5px 0px hsl(0 0% 0% / 0.15), 0 1px 2px -1px hsl(0 0% 0% / 0.15);
-  --shadow-md: 0 1px 5px 0px hsl(0 0% 0% / 0.15), 0 2px 4px -1px hsl(0 0% 0% / 0.15);
-  --shadow-lg: 0 1px 5px 0px hsl(0 0% 0% / 0.15), 0 4px 6px -1px hsl(0 0% 0% / 0.15);
-  --shadow-xl: 0 1px 5px 0px hsl(0 0% 0% / 0.15), 0 8px 10px -1px hsl(0 0% 0% / 0.15);
+  --shadow-sm:
+    0 1px 5px 0px hsl(0 0% 0% / 0.15), 0 1px 2px -1px hsl(0 0% 0% / 0.15);
+  --shadow:
+    0 1px 5px 0px hsl(0 0% 0% / 0.15), 0 1px 2px -1px hsl(0 0% 0% / 0.15);
+  --shadow-md:
+    0 1px 5px 0px hsl(0 0% 0% / 0.15), 0 2px 4px -1px hsl(0 0% 0% / 0.15);
+  --shadow-lg:
+    0 1px 5px 0px hsl(0 0% 0% / 0.15), 0 4px 6px -1px hsl(0 0% 0% / 0.15);
+  --shadow-xl:
+    0 1px 5px 0px hsl(0 0% 0% / 0.15), 0 8px 10px -1px hsl(0 0% 0% / 0.15);
   --shadow-2xl: 0 1px 5px 0px hsl(0 0% 0% / 0.38);
 }
 
@@ -181,6 +206,9 @@
   }
   html {
     @apply font-sans;
+    /* The interface font size setting; rem-based Tailwind utilities scale
+       off this, so it doubles as an overall UI scale. */
+    font-size: var(--settings-font-sans-size, 16px);
   }
 }
 
@@ -188,6 +216,15 @@
   html {
     scroll-behavior: auto;
   }
+}
+
+/* Deliberately outside any `@layer`: Tailwind's utility classes (`text-xs`,
+   `text-sm`, …) live in the `utilities` layer, and any unlayered rule beats
+   any layered one regardless of specificity. That's what lets the mono font
+   size setting override a component's own hardcoded text-size class on the
+   same element, without editing every place that renders monospace text. */
+.font-mono {
+  font-size: var(--settings-font-mono-size, 0.8125rem);
 }
 
 .typeset-docs {

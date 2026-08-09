@@ -1,6 +1,8 @@
 use dashmap::{DashMap, mapref::entry::Entry};
 use orchd_core::{AgentKind, ProjectId, SessionId};
-use orchd_store::{ProjectRecord, SessionRecord, SessionStatus, Store};
+use orchd_store::{
+  ProjectRecord, SessionRecord, SessionStatus, SettingsPatch, SettingsRecord, Store,
+};
 
 use crate::{
   actor::SessionActor, config::ActorConfig, error::RegistryError, handle::SessionHandle,
@@ -44,6 +46,17 @@ impl SessionRegistry {
     let handle = self.spawn_actor(&record, None).await?;
     self.sessions.insert(record.id, handle);
     Ok(record)
+  }
+
+  pub async fn get_settings(&self) -> Result<SettingsRecord, RegistryError> {
+    Ok(self.store.get_settings().await?)
+  }
+
+  pub async fn update_settings(
+    &self,
+    patch: SettingsPatch,
+  ) -> Result<SettingsRecord, RegistryError> {
+    Ok(self.store.update_settings(patch).await?)
   }
 
   pub async fn create_project(

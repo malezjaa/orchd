@@ -7,7 +7,7 @@ use axum::{
   routing::{get, post},
 };
 use orchd_core::{AgentKind, ModelInfo, ProjectId, SessionId};
-use orchd_store::{ProjectRecord, SessionRecord};
+use orchd_store::{ProjectRecord, SessionRecord, SettingsPatch, SettingsRecord};
 use serde::{Deserialize, Serialize};
 
 use crate::{error::ApiError, state::AppState};
@@ -27,6 +27,7 @@ pub fn router() -> Router<AppState> {
     .route("/projects/{id}/sessions", get(list_project_sessions))
     .route("/fs/browse", get(browse_fs))
     .route("/models", get(list_models))
+    .route("/settings", get(get_settings).patch(update_settings))
 }
 
 /// Serves the hardcoded model catalog so a picker or "context used" indicator
@@ -206,6 +207,19 @@ async fn archive_project(
     ProjectId::from_str(&id).map_err(|_| ApiError::bad_request("invalid project id"))?;
   state.registry.archive_project(id).await?;
   Ok(StatusCode::NO_CONTENT)
+}
+
+async fn get_settings(
+  State(state): State<AppState>,
+) -> Result<Json<SettingsRecord>, ApiError> {
+  Ok(Json(state.registry.get_settings().await?))
+}
+
+async fn update_settings(
+  State(state): State<AppState>,
+  Json(patch): Json<SettingsPatch>,
+) -> Result<Json<SettingsRecord>, ApiError> {
+  Ok(Json(state.registry.update_settings(patch).await?))
 }
 
 #[derive(Deserialize)]

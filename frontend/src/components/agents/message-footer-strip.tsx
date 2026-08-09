@@ -5,6 +5,8 @@ import { Check, Copy } from "lucide-react"
 import { motion, useReducedMotion } from "motion/react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { EASE_OUT, SPRING_PRESS } from "@/lib/ease"
+import { resolveTimeFormat, type TimeFormat } from "@/lib/appearance"
+import { useSettings } from "@/lib/queries"
 import { cn } from "@/lib/utils"
 
 export interface MessageFooterStripProps {
@@ -16,12 +18,13 @@ export interface MessageFooterStripProps {
   className?: string
 }
 
-function formatTime(iso: string) {
+function formatTime(iso: string, format: TimeFormat) {
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return null
   return date.toLocaleTimeString(undefined, {
     hour: "numeric",
     minute: "2-digit",
+    hour12: format === "12h",
   })
 }
 
@@ -36,7 +39,9 @@ export function MessageFooterStrip({
   const reduce = useReducedMotion() ?? false
   const [copied, setCopied] = useState(false)
   const copyTimer = useRef<number | undefined>(undefined)
-  const time = timestamp ? formatTime(timestamp) : null
+  const { data: settings } = useSettings()
+  const timeFormat = resolveTimeFormat(settings?.time_format)
+  const time = timestamp ? formatTime(timestamp, timeFormat) : null
 
   useEffect(
     () => () => {

@@ -7,6 +7,7 @@ edition.workspace = true
 orchd-core.workspace = true
 orchd-store.workspace = true
 orchd-session.workspace = true
+orchd-proc.workspace = true
 
 tokio.workspace = true
 tokio-stream.workspace = true
@@ -21,3 +22,4 @@ time.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 tower_governor.workspace = true
+dashmap.workspace = true
