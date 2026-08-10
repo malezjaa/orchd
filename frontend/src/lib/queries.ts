@@ -4,6 +4,7 @@ import { setAuthToken, useAuthToken } from "@/lib/auth"
 import { DEFAULT_CODE_THEME } from "@/lib/code-themes"
 import type {
   AgentKind,
+  FileContentsResponse,
   ProjectRecord,
   SessionRecord,
   SettingsPatch,
@@ -167,6 +168,32 @@ export function useFileContents(cwd: string | null, file: string | null) {
     queryFn: () => api.fileContents(cwd as string, file as string),
     enabled: token !== null && Boolean(cwd) && Boolean(file),
     staleTime: 30_000,
+  })
+}
+
+/// Persist an edited file. Debounced on the caller; success updates the
+/// contents cache in place (no refetch, so a live edit session is never
+/// disturbed) and invalidates the tree so the explorer's git badges reflect
+/// the change.
+export function useWriteFileContents() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      cwd,
+      path,
+      contents,
+    }: {
+      cwd: string
+      path: string
+      contents: string
+    }) => api.writeFileContents(cwd, path, contents),
+    onSuccess: (_data, { cwd, path, contents }) => {
+      queryClient.setQueryData<FileContentsResponse>(
+        ["fs-contents", cwd, path],
+        (old) => ({ current: contents, old: old?.old ?? null })
+      )
+      queryClient.invalidateQueries({ queryKey: ["fs-tree", cwd] })
+    },
   })
 }
 

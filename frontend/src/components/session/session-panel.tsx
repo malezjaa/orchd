@@ -1,10 +1,7 @@
 import {
   Bot,
-  Loader2,
-  MessageSquare,
   PanelLeft,
   TriangleAlert,
-  XIcon,
 } from "lucide-react"
 import {
   Fragment,
@@ -24,6 +21,8 @@ import { SessionHeader } from "@/components/session/session-header"
 import { SessionIconRail } from "@/components/session/icon-rail/session-icon-rail"
 import { TimelineItem } from "@/components/session/timeline-item"
 import { TurnWork } from "@/components/session/turn-work"
+import { FileTabs } from "@/components/session/file-tabs"
+import { FileView } from "@/components/session/file-view"
 import {
   agentIcon,
   type AgentKind,
@@ -38,18 +37,12 @@ import {
 import {
   queryKeys,
   useCreateSession,
-  useFileContents,
   useModels,
 } from "@/lib/queries"
 import { finalAssistantTextIds, isHiddenToolCall } from "@/lib/timeline"
 import { groupTimelineByTurn, turnDurationSeconds } from "@/lib/timeline-groups"
 import { useSessionSocket } from "@/lib/use-session-socket"
-import { Separator } from "@/components/ui/separator.tsx"
-import { cn } from "@/lib/utils.ts"
 import type { CurrentTab } from "@/components/app-shell.tsx"
-import { getFileIcon } from "@/lib/file-icon.tsx"
-import type { CodeViewItem, FileContents } from "@pierre/diffs"
-import { CodeView } from "@pierre/diffs/react"
 
 // Stable identity so the loading fallback doesn't defeat memoization.
 const EMPTY_MODELS: ModelInfo[] = []
@@ -129,66 +122,6 @@ function DraftHeader({ draft }: { draft: DraftSession }) {
         </p>
       </div>
     </header>
-  )
-}
-
-function OpenedFile({
-  file,
-  currentTab,
-  switchActiveTab,
-  onClose,
-}: {
-  file: string
-  currentTab: CurrentTab
-  switchActiveTab: (tab: CurrentTab) => void
-  onClose: (file: string) => void
-}) {
-  const Icon = getFileIcon(file)
-  const active = currentTab.type === "path" && currentTab.file === file
-
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      aria-label={`Open ${file}`}
-      title={file}
-      onClick={() => {
-        switchActiveTab({ type: "path", file })
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault()
-          switchActiveTab({ type: "path", file })
-        }
-      }}
-      className={cn(
-        "group/tab inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2 text-[13px] font-medium whitespace-nowrap transition-colors outline-none select-none",
-        "focus-visible:ring-2 focus-visible:ring-ring",
-        active
-          ? "bg-muted/70 text-foreground"
-          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-      )}
-    >
-      <span className="grid size-4 shrink-0 place-items-center">
-        <Icon className="size-3.5" aria-hidden />
-      </span>
-      <span className="max-w-55 truncate">{file}</span>
-      <button
-        type="button"
-        aria-label={`Close ${file}`}
-        className={cn(
-          "grid size-4 shrink-0 place-items-center rounded text-muted-foreground transition-colors outline-none",
-          "hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40",
-          active ? "opacity-100" : "opacity-0 group-hover/tab:opacity-100"
-        )}
-        onClick={(e) => {
-          e.stopPropagation()
-          onClose(file)
-        }}
-      >
-        <XIcon className="size-3" />
-      </button>
-    </div>
   )
 }
 
@@ -474,31 +407,6 @@ export function SessionPanel({
     treeRoot && activeFile
       ? `${treeRoot.replace(/\/+$/, "")}/${activeFile}`
       : null
-  const fileQuery = useFileContents(treeRoot, activeFilePath)
-
-  const fileContents: FileContents | null = useMemo(
-    () =>
-      fileQuery.data && activeFile
-        ? { name: activeFile, contents: fileQuery.data.current }
-        : null,
-    [fileQuery.data, activeFile]
-  )
-
-  const codeViewItems = useMemo<CodeViewItem[]>(
-    () =>
-      fileContents && activeFilePath
-        ? [{ id: `file:${activeFilePath}`, type: "file", file: fileContents }]
-        : [],
-    [fileContents, activeFilePath]
-  )
-
-  const codeViewOptions = useMemo(
-    () => ({
-      theme: { dark: "catppuccin-mocha", light: "catppuccin-frappe" },
-      disableFileHeader: true,
-    }),
-    []
-  )
 
   if (!session && !draft) {
     return (
@@ -567,38 +475,12 @@ export function SessionPanel({
         onTitleAnimationComplete={handleTitleAnimationComplete}
       />
 
-      <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border px-2">
-        <button
-          type="button"
-          onClick={() => switchActiveTab({ type: "session" })}
-          className={cn(
-            "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium whitespace-nowrap transition-colors outline-none select-none",
-            "focus-visible:ring-2 focus-visible:ring-ring",
-            currentTab.type === "session"
-              ? "bg-muted/70 text-foreground"
-              : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-          )}
-        >
-          <MessageSquare className="size-3.5" />
-          <span>Conversation</span>
-        </button>
-
-        {openedFiles.length > 0 ? (
-          <Separator orientation="vertical" className="my-2" />
-        ) : null}
-
-        <div className="flex h-full min-w-0 flex-1 scrollbar-none items-center gap-1 overflow-x-auto">
-          {openedFiles.map((file, index) => (
-            <OpenedFile
-              key={`file-${file}-${index}`}
-              file={file}
-              currentTab={currentTab}
-              switchActiveTab={switchActiveTab}
-              onClose={closeFile}
-            />
-          ))}
-        </div>
-      </div>
+      <FileTabs
+        currentTab={currentTab}
+        switchActiveTab={switchActiveTab}
+        openedFiles={openedFiles}
+        onClose={closeFile}
+      />
 
       <div className="flex min-h-0 flex-1">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -680,24 +562,20 @@ export function SessionPanel({
                 contextUsage={contextUsage}
               />
             </>
-          ) : fileQuery.isLoading ? (
-            <div className="grid flex-1 place-items-center text-muted-foreground">
-              <Loader2 className="size-5 animate-spin" />
-            </div>
-          ) : fileQuery.isError || !fileContents ? (
+          ) : activeFilePath && activeFile && treeRoot ? (
+            <FileView
+              key={activeFilePath}
+              cwd={treeRoot}
+              file={activeFile}
+              fullPath={activeFilePath}
+            />
+          ) : (
             <div className="grid flex-1 place-items-center">
               <div className="flex flex-col items-center gap-2 px-4 text-center text-sm text-muted-foreground">
                 <TriangleAlert className="size-5" />
                 Couldn't load {currentTab.file}
               </div>
             </div>
-          ) : (
-            <CodeView
-              key={activeFilePath ?? undefined}
-              className="min-h-0 min-w-0 flex-1 overflow-auto"
-              items={codeViewItems}
-              options={codeViewOptions}
-            />
           )}
         </div>
 

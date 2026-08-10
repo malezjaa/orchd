@@ -6,7 +6,7 @@ use std::{
   time::Duration,
 };
 
-use axum::{Json, extract::Query};
+use axum::{Json, extract::Query, http::StatusCode};
 use ignore::{WalkBuilder, WalkState};
 use serde::{Deserialize, Serialize};
 
@@ -375,6 +375,13 @@ pub struct FileContentsQuery {
   pub path: String,
 }
 
+#[derive(Deserialize)]
+pub struct WriteFileRequest {
+  pub cwd: String,
+  pub path: String,
+  pub contents: String,
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct FileContentsResponse {
   pub current: String,
@@ -442,4 +449,58 @@ pub async fn file_contents(
   let current = current.map_err(|_| ApiError::internal("filesystem task failed"))??;
 
   Ok(Json(FileContentsResponse { current, old }))
+}
+
+/// Resolve `path` against `cwd`, then verify the result stays inside the
+/// workspace. Editing is scoped to the opened project tree: a session's
+/// `cwd` is the project root, and writes must not escape it.
+async fn resolve_in_workspace(cwd: &str, path: &str) -> Result<PathBuf, ApiError> {
+  let (cwd, path) = (cwd.to_owned(), path.to_owned());
+  tokio::task::spawn_blocking(move || {
+    let canonical_cwd = std::fs::canonicalize(&cwd)
+      .map_err(|err| ApiError::bad_request(format!("cannot open cwd: {err}")))?;
+    if !canonical_cwd.is_dir() {
+      return Err(ApiError::bad_request("cwd is not a directory"));
+    }
+
+    let candidate = PathBuf::from(&path);
+    // The client sends absolute paths (tree root joined with the relative
+    // file), but tolerate relative ones by anchoring them to the cwd.
+    let candidate = if candidate.is_absolute() {
+      candidate
+    } else {
+      canonical_cwd.join(candidate)
+    };
+
+    let canonical_path = std::fs::canonicalize(&candidate).map_err(|err| {
+      ApiError::bad_request(format!("cannot open file: {err}"))
+    })?;
+    if canonical_path.is_dir() {
+      return Err(ApiError::bad_request("path is not a file"));
+    }
+    if !canonical_path.starts_with(&canonical_cwd) {
+      return Err(ApiError::bad_request("path is outside the workspace"));
+    }
+    Ok(canonical_path)
+  })
+  .await
+  .map_err(|_| ApiError::internal("filesystem task failed"))?
+}
+
+pub async fn write_file_contents(
+  Json(req): Json<WriteFileRequest>,
+) -> Result<StatusCode, ApiError> {
+  let path = resolve_in_workspace(&req.cwd, &req.path).await?;
+  let contents = req.contents;
+
+  let write = {
+    let path = path.clone();
+    tokio::task::spawn_blocking(move || {
+      std::fs::write(&path, contents)
+        .map_err(|err| ApiError::bad_request(format!("failed to write file: {err}")))
+    })
+  };
+
+  write.await.map_err(|_| ApiError::internal("filesystem task failed"))??;
+  Ok(StatusCode::NO_CONTENT)
 }

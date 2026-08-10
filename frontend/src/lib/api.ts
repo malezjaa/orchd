@@ -114,6 +114,12 @@ export const api = {
       `/fs/contents?cwd=${encodeURIComponent(cwd)}&path=${encodeURIComponent(file)}`
     ),
 
+  writeFileContents: (cwd: string, file: string, contents: string) =>
+    request<void>(`/fs/contents`, {
+      method: "PUT",
+      body: JSON.stringify({ cwd, path: file, contents }),
+    }),
+
   fileTree: (path: string) =>
     request<FileTreeResponse>(`/fs/tree?path=${encodeURIComponent(path)}`),
 
