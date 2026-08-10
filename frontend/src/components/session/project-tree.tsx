@@ -5,13 +5,18 @@ import { TooltipIcon } from "@/components/tooltip-icon"
 import { Input } from "@/components/ui/input"
 import type { GitStatusEntry } from "@/lib/orchd"
 import { useProjectTree } from "@/lib/queries"
+import type { CurrentTab } from "@/components/app-shell.tsx"
 
 function FileTreeView({
   paths,
   gitStatus,
+  currentTab,
+  switchActiveTab,
 }: {
   paths: readonly string[]
   gitStatus?: readonly GitStatusEntry[]
+  currentTab: CurrentTab
+  switchActiveTab: (tab: CurrentTab) => void
 }) {
   const { model } = useFileTree({
     paths,
@@ -21,8 +26,23 @@ function FileTreeView({
     initialExpansion: "closed",
     flattenEmptyDirectories: true,
     icons: { set: "complete", colored: false },
+    onSelectionChange: (option) => {
+      if (option.length === 1 && !model.getItem(option[0])?.isDirectory()) {
+        switchActiveTab({ type: "path", file: option[0] })
+      }
+    },
   })
   const search = useFileTreeSearch(model)
+
+  useEffect(() => {
+    if (currentTab.type === "path") {
+      model.focusPath(currentTab.file)
+    } else {
+      for (const path of model.getSelectedPaths()) {
+        model.getItem(path)?.deselect()
+      }
+    }
+  }, [currentTab, model])
 
   useEffect(() => {
     model.setGitStatus(gitStatus)
@@ -56,12 +76,16 @@ export interface ProjectTreePanelProps {
   rootPath: string
   title: string
   onBack: () => void
+  currentTab: CurrentTab
+  switchActiveTab: (tab: CurrentTab) => void
 }
 
 export function ProjectTreePanel({
   rootPath,
   title,
   onBack,
+  currentTab,
+  switchActiveTab,
 }: ProjectTreePanelProps) {
   const { data, isLoading, isError } = useProjectTree(rootPath, true)
 
@@ -89,7 +113,12 @@ export function ProjectTreePanel({
           Couldn't load project files.
         </div>
       ) : (
-        <FileTreeView paths={data.files} gitStatus={data.git ?? undefined} />
+        <FileTreeView
+          paths={data.files}
+          gitStatus={data.git ?? undefined}
+          currentTab={currentTab}
+          switchActiveTab={switchActiveTab}
+        />
       )}
     </div>
   )

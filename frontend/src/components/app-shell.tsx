@@ -24,6 +24,8 @@ import type { AgentKind, ProjectRecord, SessionRecord } from "@/lib/orchd"
 import { basename } from "@/lib/orchd"
 import { useArchivedSessions, useProjects, useSessions } from "@/lib/queries"
 
+export type CurrentTab = { type: "session" } | { type: "path"; file: string }
+
 export function AppShell() {
   const { data: sessions = [], isLoading } = useSessions()
   const { data: projects = [] } = useProjects()
@@ -31,6 +33,8 @@ export function AppShell() {
   const [draft, setDraft] = useState<DraftSession | null>(null)
   const [newSessionOpen, setNewSessionOpen] = useState(false)
   const [newProjectOpen, setNewProjectOpen] = useState(false)
+  const [openedFiles, setOpenedFiles] = useState<string[]>([])
+  const [currentTab, setCurrentTab] = useState<CurrentTab>({ type: "session" })
   const [treeOpen, setTreeOpen] = useState(false)
   const { theme } = useTheme()
 
@@ -72,6 +76,13 @@ export function AppShell() {
     setActiveId(session.id)
   }
 
+  const switchActiveTab = (tab: CurrentTab) => {
+    if (tab.type === "path" && !openedFiles.includes(tab.file)) {
+      setOpenedFiles((openedFiles) => [...openedFiles, tab.file])
+    }
+    setCurrentTab(tab)
+  }
+
   return (
     <AnimatedSidebarProvider className="h-svh overflow-hidden">
       <SettingsEffects />
@@ -87,12 +98,18 @@ export function AppShell() {
         treeRoot={treeRoot}
         treeTitle={treeTitle}
         onTreeBack={() => setTreeOpen(false)}
+        currentTab={currentTab}
+        switchActiveTab={switchActiveTab}
       />
       <AnimatedSidebarInset>
         <SessionPanel
           session={activeSession}
           draft={draft}
           onSessionCreated={handleSessionCreated}
+          currentTab={currentTab}
+          switchActiveTab={switchActiveTab}
+          openedFiles={openedFiles}
+          setOpenedFiles={setOpenedFiles}
         />
       </AnimatedSidebarInset>
 

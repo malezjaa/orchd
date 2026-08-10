@@ -10,14 +10,11 @@ import {
 } from "@/components/motion/animated-sidebar.tsx"
 import { ProjectTreePanel } from "@/components/session/project-tree.tsx"
 import { SessionList } from "@/components/sidebar/session-list.tsx"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
 import { useArchivedSessions } from "@/lib/queries.ts"
-import { cn } from "@/lib/utils.ts"
 import type { ProjectRecord, SessionRecord } from "@/lib/orchd.ts"
+import { TooltipIcon } from "@/components/tooltip-icon.tsx"
+import { IconActionButton } from "@/components/icon-action-button.tsx"
+import type { CurrentTab } from "@/components/app-shell.tsx"
 
 export interface AppSidebarProps {
   sessions: SessionRecord[]
@@ -31,37 +28,28 @@ export interface AppSidebarProps {
   treeRoot: string | null
   treeTitle: string
   onTreeBack: () => void
+  currentTab: CurrentTab
+  switchActiveTab: (tab: CurrentTab) => void
 }
 
 function SidebarSettingsButton({ onOpen }: { onOpen: () => void }) {
   const { collapsed } = useAnimatedSidebarPanel()
-  const label = "Settings"
 
-  const trigger = (
-    <button
-      type="button"
-      aria-label={label}
-      title={collapsed ? label : undefined}
-      onClick={onOpen}
-      className={cn(
-        "flex min-h-9 w-full items-center gap-2.5 rounded-xl px-3 text-left text-sm font-medium text-muted-foreground transition-colors outline-none hover:bg-muted/60 hover:text-foreground focus-visible:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring",
-        collapsed && "justify-center px-0"
-      )}
-    >
-      <span className="grid size-5 shrink-0 place-items-center">
+  if (collapsed) {
+    return (
+      <TooltipIcon label="Settings" onClick={onOpen}>
         <Settings className="size-4" />
-      </span>
-      {!collapsed ? <span className="truncate">{label}</span> : null}
-    </button>
-  )
-
-  if (!collapsed) return trigger
+      </TooltipIcon>
+    )
+  }
 
   return (
-    <Tooltip>
-      <TooltipTrigger render={trigger} />
-      <TooltipContent side="top">{label}</TooltipContent>
-    </Tooltip>
+    <IconActionButton
+      onClick={onOpen}
+      className="w-full"
+      icon={<Settings className="size-4" />}
+      label={"Settings"}
+    />
   )
 }
 
@@ -77,6 +65,8 @@ export function AppSidebar({
   treeRoot,
   treeTitle,
   onTreeBack,
+  currentTab,
+  switchActiveTab,
 }: AppSidebarProps) {
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
@@ -97,6 +87,8 @@ export function AppSidebar({
             rootPath={treeRoot}
             title={treeTitle}
             onBack={onTreeBack}
+            currentTab={currentTab}
+            switchActiveTab={switchActiveTab}
           />
         ) : (
           <SessionList
