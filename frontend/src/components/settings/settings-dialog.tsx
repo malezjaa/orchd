@@ -1,4 +1,4 @@
-import { Info, Monitor, Search, SlidersHorizontal, X } from "lucide-react"
+import { Info, Monitor, SearchIcon, SlidersHorizontal, X } from "lucide-react"
 import { useMemo, useState } from "react"
 import {
   INTERFACE_FONT_OPTIONS,
@@ -26,6 +26,11 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group"
 
 type CategoryId = "general" | "appearance"
 
@@ -322,14 +327,17 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
               </DialogClose>
             </div>
             <div className="relative">
-              <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search settings…"
-                aria-label="Search settings"
-                className="h-8 w-full rounded-lg border border-border bg-transparent pr-2.5 pl-8 text-xs text-foreground outline-none placeholder:text-muted-foreground/70 focus-visible:border-foreground/25"
-              />
+              <InputGroup>
+                <InputGroupInput
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search settings…"
+                  aria-label="Search settings"
+                />
+                <InputGroupAddon>
+                  <SearchIcon />
+                </InputGroupAddon>
+              </InputGroup>
             </div>
 
             <nav

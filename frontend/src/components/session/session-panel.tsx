@@ -1,4 +1,11 @@
-import { Bot, MessageSquare, PanelLeft, XIcon } from "lucide-react"
+import {
+  Bot,
+  Loader2,
+  MessageSquare,
+  PanelLeft,
+  TriangleAlert,
+  XIcon,
+} from "lucide-react"
 import {
   Fragment,
   useCallback,
@@ -28,7 +35,12 @@ import {
   type SessionRecord,
   type ThinkingEffort,
 } from "@/lib/orchd"
-import { queryKeys, useCreateSession, useModels } from "@/lib/queries"
+import {
+  queryKeys,
+  useCreateSession,
+  useFileContents,
+  useModels,
+} from "@/lib/queries"
 import { finalAssistantTextIds, isHiddenToolCall } from "@/lib/timeline"
 import { groupTimelineByTurn, turnDurationSeconds } from "@/lib/timeline-groups"
 import { useSessionSocket } from "@/lib/use-session-socket"
@@ -36,6 +48,8 @@ import { Separator } from "@/components/ui/separator.tsx"
 import { cn } from "@/lib/utils.ts"
 import type { CurrentTab } from "@/components/app-shell.tsx"
 import { getFileIcon } from "@/lib/file-icon.tsx"
+import type { CodeViewItem, FileContents } from "@pierre/diffs"
+import { CodeView } from "@pierre/diffs/react"
 
 // Stable identity so the loading fallback doesn't defeat memoization.
 const EMPTY_MODELS: ModelInfo[] = []
@@ -71,6 +85,7 @@ export interface SessionPanelProps {
   switchActiveTab: (tab: CurrentTab) => void
   openedFiles: string[]
   setOpenedFiles: (files: string[]) => void
+  treeRoot: string | null
 }
 
 const LIVE_STATUSES = new Set(["creating", "running", "interrupted"])
@@ -185,6 +200,7 @@ export function SessionPanel({
   switchActiveTab,
   openedFiles,
   setOpenedFiles,
+  treeRoot,
 }: SessionPanelProps) {
   const queryClient = useQueryClient()
   const createSession = useCreateSession()
@@ -453,6 +469,37 @@ export function SessionPanel({
     }
   }
 
+  const activeFile = currentTab.type === "path" ? currentTab.file : null
+  const activeFilePath =
+    treeRoot && activeFile
+      ? `${treeRoot.replace(/\/+$/, "")}/${activeFile}`
+      : null
+  const fileQuery = useFileContents(treeRoot, activeFilePath)
+
+  const fileContents: FileContents | null = useMemo(
+    () =>
+      fileQuery.data && activeFile
+        ? { name: activeFile, contents: fileQuery.data.current }
+        : null,
+    [fileQuery.data, activeFile]
+  )
+
+  const codeViewItems = useMemo<CodeViewItem[]>(
+    () =>
+      fileContents && activeFilePath
+        ? [{ id: `file:${activeFilePath}`, type: "file", file: fileContents }]
+        : [],
+    [fileContents, activeFilePath]
+  )
+
+  const codeViewOptions = useMemo(
+    () => ({
+      theme: { dark: "catppuccin-mocha", light: "catppuccin-frappe" },
+      disableFileHeader: true,
+    }),
+    []
+  )
+
   if (!session && !draft) {
     return (
       <div className="flex h-full min-h-0 flex-1 flex-col">
@@ -540,10 +587,10 @@ export function SessionPanel({
           <Separator orientation="vertical" className="my-2" />
         ) : null}
 
-        <div className="flex h-full min-w-0 flex-1 [scrollbar-width:none] items-center gap-1 overflow-x-auto [&::-webkit-scrollbar]:hidden">
-          {openedFiles.map((file) => (
+        <div className="flex h-full min-w-0 flex-1 scrollbar-none items-center gap-1 overflow-x-auto">
+          {openedFiles.map((file, index) => (
             <OpenedFile
-              key={file}
+              key={`file-${file}-${index}`}
               file={file}
               currentTab={currentTab}
               switchActiveTab={switchActiveTab}
@@ -554,7 +601,7 @@ export function SessionPanel({
       </div>
 
       <div className="flex min-h-0 flex-1">
-        <div className="flex min-h-0 flex-1 flex-col">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {currentTab.type === "session" ? (
             <>
               <MessageScroller
@@ -633,8 +680,24 @@ export function SessionPanel({
                 contextUsage={contextUsage}
               />
             </>
+          ) : fileQuery.isLoading ? (
+            <div className="grid flex-1 place-items-center text-muted-foreground">
+              <Loader2 className="size-5 animate-spin" />
+            </div>
+          ) : fileQuery.isError || !fileContents ? (
+            <div className="grid flex-1 place-items-center">
+              <div className="flex flex-col items-center gap-2 px-4 text-center text-sm text-muted-foreground">
+                <TriangleAlert className="size-5" />
+                Couldn't load {currentTab.file}
+              </div>
+            </div>
           ) : (
-            <>{currentTab.file}</>
+            <CodeView
+              key={activeFilePath ?? undefined}
+              className="min-h-0 min-w-0 flex-1 overflow-auto"
+              items={codeViewItems}
+              options={codeViewOptions}
+            />
           )}
         </div>
 

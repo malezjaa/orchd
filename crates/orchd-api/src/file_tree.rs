@@ -1,5 +1,6 @@
 use std::{
   borrow::Cow,
+  fs::read_to_string,
   path::{Path as FsPath, PathBuf},
   sync::mpsc,
   time::Duration,
@@ -366,4 +367,79 @@ pub async fn file_tree(
     files,
     git,
   }))
+}
+
+#[derive(Deserialize)]
+pub struct FileContentsQuery {
+  pub cwd: String,
+  pub path: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct FileContentsResponse {
+  pub current: String,
+  pub old: Option<String>,
+}
+
+async fn git_show_old(cwd: &FsPath, rel: &str) -> Option<String> {
+  let show = tokio::time::timeout(
+    GIT_TIMEOUT,
+    tokio::process::Command::new("git")
+      .arg("-C")
+      .arg(cwd)
+      .args(["show", &format!("HEAD:./{rel}")])
+      .kill_on_drop(true)
+      .output(),
+  )
+  .await
+  .ok()?
+  .ok()?;
+
+  if !show.status.success() {
+    return None;
+  }
+  String::from_utf8(show.stdout).ok()
+}
+
+pub async fn file_contents(
+  Query(query): Query<FileContentsQuery>,
+) -> Result<Json<FileContentsResponse>, ApiError> {
+  let (canonical_path, canonical_cwd) = {
+    let (path, cwd) = (query.path.clone(), query.cwd.clone());
+    tokio::task::spawn_blocking(move || -> Result<(PathBuf, PathBuf), ApiError> {
+      let canonical_path = std::fs::canonicalize(&path)
+        .map_err(|err| ApiError::bad_request(format!("cannot open file: {err}")))?;
+      if canonical_path.is_dir() {
+        return Err(ApiError::bad_request("path is not a file"));
+      }
+      let canonical_cwd = std::fs::canonicalize(&cwd)
+        .map_err(|err| ApiError::bad_request(format!("cannot open cwd: {err}")))?;
+      if !canonical_cwd.is_dir() {
+        return Err(ApiError::bad_request("cwd is not a directory"));
+      }
+      Ok((canonical_path, canonical_cwd))
+    })
+    .await
+    .map_err(|_| ApiError::internal("filesystem task failed"))??
+  };
+
+  let read_fut = {
+    let canonical_path = canonical_path.clone();
+    tokio::task::spawn_blocking(move || {
+      read_to_string(&canonical_path)
+        .map_err(|err| ApiError::bad_request(format!("failed to read file: {err}")))
+    })
+  };
+
+  let old_fut = async {
+    match canonical_path.strip_prefix(&canonical_cwd) {
+      Ok(rel) => git_show_old(&canonical_cwd, &rel_to_slash(rel)).await,
+      Err(_) => None,
+    }
+  };
+
+  let (current, old) = tokio::join!(read_fut, old_fut);
+  let current = current.map_err(|_| ApiError::internal("filesystem task failed"))??;
+
+  Ok(Json(FileContentsResponse { current, old }))
 }

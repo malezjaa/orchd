@@ -6,6 +6,7 @@ import { clearAuthToken, getAuthToken } from "@/lib/auth"
 import type {
   AgentKind,
   ClientSessionRecord,
+  FileContentsResponse,
   FileTreeResponse,
   FsBrowseResponse,
   ModelInfo,
@@ -106,6 +107,11 @@ export const api = {
   browseFolder: (path?: string) =>
     request<FsBrowseResponse>(
       `/fs/browse${path ? `?path=${encodeURIComponent(path)}` : ""}`
+    ),
+
+  fileContents: (cwd: string, file: string) =>
+    request<FileContentsResponse>(
+      `/fs/contents?cwd=${encodeURIComponent(cwd)}&path=${encodeURIComponent(file)}`
     ),
 
   fileTree: (path: string) =>

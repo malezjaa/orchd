@@ -75,11 +75,17 @@ export function AppShell() {
     setTreeOpen(true)
     setActiveId(session.id)
   }
-
   const switchActiveTab = (tab: CurrentTab) => {
-    if (tab.type === "path" && !openedFiles.includes(tab.file)) {
-      setOpenedFiles((openedFiles) => [...openedFiles, tab.file])
+    if (tab.type === "path") {
+      setOpenedFiles((openedFiles) => {
+        if (openedFiles.includes(tab.file)) {
+          return openedFiles
+        }
+
+        return [...openedFiles, tab.file]
+      })
     }
+
     setCurrentTab(tab)
   }
 
@@ -110,6 +116,7 @@ export function AppShell() {
           switchActiveTab={switchActiveTab}
           openedFiles={openedFiles}
           setOpenedFiles={setOpenedFiles}
+          treeRoot={treeRoot}
         />
       </AnimatedSidebarInset>
 

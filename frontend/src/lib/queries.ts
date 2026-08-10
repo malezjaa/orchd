@@ -160,6 +160,16 @@ export function useProjectTree(path: string | undefined, enabled: boolean) {
   })
 }
 
+export function useFileContents(cwd: string | null, file: string | null) {
+  const token = useAuthToken()
+  return useQuery({
+    queryKey: ["fs-contents", cwd ?? "__none__", file ?? "__none__"],
+    queryFn: () => api.fileContents(cwd as string, file as string),
+    enabled: token !== null && Boolean(cwd) && Boolean(file),
+    staleTime: 30_000,
+  })
+}
+
 export function useCreateSession() {
   const queryClient = useQueryClient()
   return useMutation({

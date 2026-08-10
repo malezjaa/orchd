@@ -105,6 +105,11 @@ export interface FsBrowseResponse {
   entries: FsEntry[]
 }
 
+export interface FileContentsResponse {
+  current: string
+  old: string | null
+}
+
 export type GitStatus =
   | "added"
   | "deleted"

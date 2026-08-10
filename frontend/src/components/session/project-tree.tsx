@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input"
 import type { GitStatusEntry } from "@/lib/orchd"
 import { useProjectTree } from "@/lib/queries"
 import type { CurrentTab } from "@/components/app-shell.tsx"
+import { Separator } from "@/components/ui/separator"
 
 function FileTreeView({
   paths,
@@ -55,8 +56,9 @@ function FileTreeView({
         onChange={(event) => search.setValue(event.target.value)}
         placeholder="Search files"
         aria-label="Search files"
-        className="h-8 rounded-lg px-2.5 text-xs"
       />
+
+      <Separator />
       <div className="min-h-0 flex-1 overflow-hidden">
         <FileTree
           model={model}
