@@ -187,6 +187,10 @@ pub struct SessionRecord {
   /// session-level analog of `ProjectRecord::archived_at`.
   #[serde(with = "time::serde::rfc3339::option")]
   pub archived_at: Option<OffsetDateTime>,
+  /// `None` for unpinned sessions. Pinned sessions are listed first in the
+  /// sidebar while retaining their creation order within each group.
+  #[serde(with = "time::serde::rfc3339::option")]
+  pub pinned_at: Option<OffsetDateTime>,
   #[serde(with = "time::serde::rfc3339")]
   pub created_at: OffsetDateTime,
   #[serde(with = "time::serde::rfc3339")]

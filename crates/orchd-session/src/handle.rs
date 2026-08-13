@@ -4,7 +4,7 @@ use std::sync::{
 };
 
 use orchd_core::{AgentKind, SessionCommand, SessionEvent, SessionId};
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::{Notify, broadcast, mpsc};
 
 use crate::error::RegistryError;
 
@@ -22,6 +22,7 @@ pub struct SessionHandle {
   /// Mirrors the actor's `turn_in_flight` so callers outside the actor can
   /// report whether the agent is working without a command round-trip.
   busy: Arc<AtomicBool>,
+  stopped: Arc<Notify>,
 }
 
 impl SessionHandle {
@@ -33,13 +34,21 @@ impl SessionHandle {
     mpsc::Receiver<SessionCommand>,
     broadcast::Sender<SessionEvent>,
     Arc<AtomicBool>,
+    Arc<Notify>,
   ) {
     let (cmd_tx, cmd_rx) = mpsc::channel(CMD_CHANNEL_DEPTH);
     let (events_tx, _) = broadcast::channel(EVENT_BROADCAST_DEPTH);
     let busy = Arc::new(AtomicBool::new(false));
-    let handle =
-      Self { id, agent_kind, cmd_tx, events_tx: events_tx.clone(), busy: busy.clone() };
-    (handle, cmd_rx, events_tx, busy)
+    let stopped = Arc::new(Notify::new());
+    let handle = Self {
+      id,
+      agent_kind,
+      cmd_tx,
+      events_tx: events_tx.clone(),
+      busy: busy.clone(),
+      stopped: stopped.clone(),
+    };
+    (handle, cmd_rx, events_tx, busy, stopped)
   }
 
   /// Whether a turn is currently in flight for this session.
@@ -57,6 +66,10 @@ impl SessionHandle {
   /// the store, then subscribe to catch anything appended concurrently.
   pub fn subscribe(&self) -> broadcast::Receiver<SessionEvent> {
     self.events_tx.subscribe()
+  }
+
+  pub async fn wait_stopped(&self) {
+    self.stopped.notified().await;
   }
 
   /// A sender into this same session's command channel, handed to the actor

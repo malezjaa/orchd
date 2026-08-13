@@ -524,6 +524,7 @@ impl Translator for ClaudeCodeTranslator {
       SessionCommand::ResolveApproval { .. }
       | SessionCommand::UpdatePolicy(_)
       | SessionCommand::Close { .. }
+      | SessionCommand::RenameTitle { .. }
       | SessionCommand::RegenerateTitle
       | SessionCommand::TitleGenerationCompleted { .. } => Ok(vec![]),
     }

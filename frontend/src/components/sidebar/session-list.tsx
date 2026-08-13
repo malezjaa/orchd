@@ -1,11 +1,9 @@
 import {
   Archive,
-  ArchiveRestore,
   ArrowLeft,
   Folder,
   FolderOpen,
   FolderPlus,
-  MoreHorizontal,
   Search as SearchIcon,
   SquarePen,
 } from "lucide-react"
@@ -22,11 +20,7 @@ import {
   AnimatedSidebarMenuSubButton,
   AnimatedSidebarMenuSubItem,
 } from "@/components/motion/animated-sidebar"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
+import { SessionMenu } from "@/components/session/session-menu"
 import {
   agentIcon,
   agentLabel,
@@ -34,8 +28,6 @@ import {
   sessionDisplayName,
   type SessionRecord,
 } from "@/lib/orchd"
-import { useArchiveSession, useUnarchiveSession } from "@/lib/queries"
-import { cn } from "@/lib/utils"
 import { TooltipIcon } from "@/components/tooltip-icon.tsx"
 
 export interface SessionListProps {
@@ -52,6 +44,7 @@ export interface SessionListProps {
   onCreateProject: () => void
   historyOnly: boolean
   onToggleHistory: () => void
+  onDeleted: (id: string) => void
 }
 
 interface ProjectGroup {
@@ -82,63 +75,6 @@ function SessionWorkingStatus({ session }: { session: SessionRecord }) {
   )
 }
 
-function SessionMenu({
-  sessionId,
-  archived,
-}: {
-  sessionId: string
-  archived: boolean
-}) {
-  const [open, setOpen] = useState(false)
-  const archiveSession = useArchiveSession()
-  const unarchiveSession = useUnarchiveSession()
-  const pending = archived
-    ? unarchiveSession.isPending
-    : archiveSession.isPending
-
-  return (
-    // Top-aligned to the title row, since centering on the full item
-    // would land the button between the two lines of a working row.
-    <div className="absolute top-1 right-1 flex">
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger
-          aria-label="Session options"
-          className={cn(
-            "grid size-6 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground transition-opacity outline-none group-hover/session:opacity-100 hover:text-foreground focus-visible:opacity-100",
-            open ? "opacity-100" : "opacity-0"
-          )}
-        >
-          <MoreHorizontal className="size-3.5" />
-        </PopoverTrigger>
-        <PopoverContent align="end" className="w-40 gap-0 rounded-xl p-1">
-          <button
-            type="button"
-            onClick={() => {
-              setOpen(false)
-              if (archived) unarchiveSession.mutate(sessionId)
-              else archiveSession.mutate(sessionId)
-            }}
-            disabled={pending}
-            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm text-foreground outline-none hover:bg-muted disabled:opacity-50"
-          >
-            {archived ? (
-              <>
-                <ArchiveRestore className="size-3.5 text-muted-foreground" />
-                Unarchive
-              </>
-            ) : (
-              <>
-                <Archive className="size-3.5 text-muted-foreground" />
-                Archive
-              </>
-            )}
-          </button>
-        </PopoverContent>
-      </Popover>
-    </div>
-  )
-}
-
 export function SessionList({
   onCreate,
   sessions,
@@ -153,6 +89,7 @@ export function SessionList({
   onCreateProject,
   historyOnly,
   onToggleHistory,
+  onDeleted,
 }: SessionListProps) {
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(
     () => new Set()
@@ -306,10 +243,13 @@ export function SessionList({
                           >
                             {sessionDisplayName(session)}
                           </AnimatedSidebarMenuSubButton>
-                          <SessionMenu
-                            sessionId={session.id}
-                            archived={historyOnly}
-                          />
+                          <div className="absolute top-1 right-1 opacity-0 transition-opacity group-hover/session:opacity-100 focus-within:opacity-100">
+                            <SessionMenu
+                              session={session}
+                              archived={historyOnly}
+                              onDeleted={onDeleted}
+                            />
+                          </div>
                         </AnimatedSidebarMenuSubItem>
                       )
                     })}
@@ -337,7 +277,13 @@ export function SessionList({
                   >
                     {sessionDisplayName(session)}
                   </AnimatedSidebarMenuButton>
-                  <SessionMenu sessionId={session.id} archived={historyOnly} />
+                  <div className="absolute top-1 right-1 opacity-0 transition-opacity group-hover/session:opacity-100 focus-within:opacity-100">
+                    <SessionMenu
+                      session={session}
+                      archived={historyOnly}
+                      onDeleted={onDeleted}
+                    />
+                  </div>
                 </AnimatedSidebarMenuItem>
               )
             })}

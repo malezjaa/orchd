@@ -1,5 +1,5 @@
 use dashmap::{DashMap, mapref::entry::Entry};
-use orchd_core::{AgentKind, ProjectId, SessionId};
+use orchd_core::{AgentKind, ProjectId, SessionId, sanitize_title};
 use orchd_store::{
   ProjectRecord, SessionRecord, SessionStatus, SettingsPatch, SettingsRecord, Store,
 };
@@ -134,7 +134,7 @@ impl SessionRegistry {
     record: &SessionRecord,
     native_session_id: Option<String>,
   ) -> Result<SessionHandle, RegistryError> {
-    let (handle, cmd_rx, events_tx, busy) =
+    let (handle, cmd_rx, events_tx, busy, stopped) =
       SessionHandle::new_pair(record.id, record.agent_kind);
     let actor = SessionActor::new(
       record.id,
@@ -145,6 +145,7 @@ impl SessionRegistry {
       handle.command_sender(),
       events_tx,
       busy,
+      stopped,
       self.config,
       native_session_id,
       record.title.clone(),
@@ -221,5 +222,60 @@ impl SessionRegistry {
       }
       Err(err) => Err(err.into()),
     }
+  }
+
+  pub async fn set_session_pinned(
+    &self,
+    id: SessionId,
+    pinned: bool,
+  ) -> Result<(), RegistryError> {
+    match self.store.set_session_pinned(id, pinned).await {
+      Ok(()) => Ok(()),
+      Err(orchd_store::StoreError::SessionNotFound(id)) => {
+        Err(RegistryError::NotFound(id))
+      }
+      Err(err) => Err(err.into()),
+    }
+  }
+
+  pub async fn rename_session(
+    &self,
+    id: SessionId,
+    title: &str,
+  ) -> Result<(), RegistryError> {
+    let title = sanitize_title(title).ok_or(RegistryError::InvalidTitle)?;
+    self.store.set_title(id, &title).await?;
+    if let Some(handle) = self.get(id) {
+      let _ = handle.send(orchd_core::SessionCommand::RenameTitle { title }).await;
+    }
+    Ok(())
+  }
+
+  pub async fn delete_session(&self, id: SessionId) -> Result<(), RegistryError> {
+    let handle = self.sessions.remove(&id).map(|(_, handle)| handle);
+    if let Some(handle) = handle {
+      let stopped = handle.wait_stopped();
+      let _ = handle
+        .send(orchd_core::SessionCommand::Close {
+          reason: orchd_core::CloseReason::ClientRequested,
+        })
+        .await;
+      stopped.await;
+    }
+    match self.store.delete_session(id).await {
+      Ok(()) => Ok(()),
+      Err(orchd_store::StoreError::SessionNotFound(id)) => {
+        Err(RegistryError::NotFound(id))
+      }
+      Err(err) => Err(err.into()),
+    }
+  }
+
+  pub async fn regenerate_session_title(
+    &self,
+    id: SessionId,
+  ) -> Result<(), RegistryError> {
+    let handle = self.get_or_resume(id).await?;
+    handle.send(orchd_core::SessionCommand::RegenerateTitle).await
   }
 }

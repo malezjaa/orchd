@@ -14,6 +14,7 @@ impl From<RegistryError> for ApiError {
       RegistryError::NotFound(_) | RegistryError::ProjectNotFound(_) => {
         StatusCode::NOT_FOUND
       }
+      RegistryError::InvalidTitle => StatusCode::BAD_REQUEST,
       RegistryError::ActorGone => StatusCode::GONE,
       RegistryError::Store(_) => StatusCode::INTERNAL_SERVER_ERROR,
     };

@@ -1,11 +1,17 @@
+mod title_generation;
 mod translator;
 
 use orchd_core::{
   AgentAdapter, AgentCapabilities, AgentKind, Framing, LaunchSpec, SpawnSpec, Translator,
 };
+pub use title_generation::{
+  TitleGenerationError, generate_initial_title, regenerate_title,
+};
 pub use translator::CodexTranslator;
 
-/// Default binary name, resolved via `PATH`.
+/// Default binary name, resolved via `PATH`. Title generation uses this
+/// constant rather than an adapter instance, since it runs in parallel with
+/// a session's own agent subprocess.
 pub const CODEX_BINARY: &str = "codex";
 
 fn capabilities() -> AgentCapabilities {

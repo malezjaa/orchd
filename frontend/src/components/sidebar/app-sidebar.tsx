@@ -21,6 +21,7 @@ export interface AppSidebarProps {
   projects: ProjectRecord[]
   activeId: string | null
   onSelect: (id: string) => void
+  onDeleted: (id: string) => void
   onCreate: () => void
   onCreateProject: () => void
   loading?: boolean
@@ -58,6 +59,7 @@ export function AppSidebar({
   projects,
   activeId,
   onSelect,
+  onDeleted,
   onCreate,
   onCreateProject,
   loading,
@@ -96,6 +98,7 @@ export function AppSidebar({
             projects={projects}
             activeId={activeId}
             onSelect={onSelect}
+            onDeleted={onDeleted}
             searchOpen={searchOpen}
             searchQuery={searchQuery}
             onSearchQueryChange={setSearchQuery}

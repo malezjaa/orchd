@@ -61,6 +61,7 @@ impl Store {
       model: None,
       context_tokens_used: None,
       archived_at: None,
+      pinned_at: None,
       created_at: OffsetDateTime::now_utc(),
       updated_at: OffsetDateTime::now_utc(),
     };
@@ -93,7 +94,7 @@ impl Store {
   ) -> Result<Option<SessionRecord>, StoreError> {
     let row = sqlx::query(
       "SELECT id, agent_kind, project_id, cwd, status, native_session_id, pgid, title, \
-       model, context_tokens_used, archived_at, created_at, updated_at
+       model, context_tokens_used, archived_at, pinned_at, created_at, updated_at
              FROM sessions WHERE id = ?1",
     )
     .bind(id.to_string())
@@ -108,8 +109,9 @@ impl Store {
   pub async fn list_sessions(&self) -> Result<Vec<SessionRecord>, StoreError> {
     let rows = sqlx::query(
       "SELECT id, agent_kind, project_id, cwd, status, native_session_id, pgid, title, \
-       model, context_tokens_used, archived_at, created_at, updated_at
-             FROM sessions WHERE archived_at IS NULL ORDER BY created_at DESC",
+       model, context_tokens_used, archived_at, pinned_at, created_at, updated_at
+             FROM sessions WHERE archived_at IS NULL ORDER BY pinned_at IS NULL, \
+       pinned_at, created_at DESC",
     )
     .fetch_all(&self.pool)
     .await?;
@@ -122,8 +124,9 @@ impl Store {
   pub async fn list_archived_sessions(&self) -> Result<Vec<SessionRecord>, StoreError> {
     let rows = sqlx::query(
       "SELECT id, agent_kind, project_id, cwd, status, native_session_id, pgid, title, \
-       model, context_tokens_used, archived_at, created_at, updated_at
-             FROM sessions WHERE archived_at IS NOT NULL ORDER BY archived_at DESC",
+       model, context_tokens_used, archived_at, pinned_at, created_at, updated_at
+             FROM sessions WHERE archived_at IS NOT NULL ORDER BY pinned_at IS NULL, \
+       pinned_at, archived_at DESC",
     )
     .fetch_all(&self.pool)
     .await?;
@@ -137,7 +140,7 @@ impl Store {
   ) -> Result<Vec<SessionRecord>, StoreError> {
     let rows = sqlx::query(
       "SELECT id, agent_kind, project_id, cwd, status, native_session_id, pgid, title, \
-       model, context_tokens_used, archived_at, created_at, updated_at
+       model, context_tokens_used, archived_at, pinned_at, created_at, updated_at
              FROM sessions WHERE project_id = ?1 AND archived_at IS NULL ORDER BY \
        created_at DESC",
     )
@@ -183,6 +186,52 @@ impl Store {
     if res.rows_affected() == 0 {
       return Err(StoreError::SessionNotFound(id));
     }
+    Ok(())
+  }
+
+  pub async fn set_session_pinned(
+    &self,
+    id: SessionId,
+    pinned: bool,
+  ) -> Result<(), StoreError> {
+    let pinned_at = pinned.then(|| OffsetDateTime::now_utc().unix_timestamp());
+    let res =
+      sqlx::query("UPDATE sessions SET pinned_at = ?1, updated_at = ?2 WHERE id = ?3")
+        .bind(pinned_at)
+        .bind(OffsetDateTime::now_utc().unix_timestamp())
+        .bind(id.to_string())
+        .execute(&self.pool)
+        .await?;
+
+    if res.rows_affected() == 0 {
+      return Err(StoreError::SessionNotFound(id));
+    }
+    Ok(())
+  }
+
+  /// Deletes the complete session record and all data owned by it.
+  pub async fn delete_session(&self, id: SessionId) -> Result<(), StoreError> {
+    let mut tx = self.pool.begin().await?;
+    let exists = sqlx::query("SELECT 1 FROM sessions WHERE id = ?1")
+      .bind(id.to_string())
+      .fetch_optional(&mut *tx)
+      .await?
+      .is_some();
+    if !exists {
+      return Err(StoreError::SessionNotFound(id));
+    }
+
+    for table in ["events", "approvals", "policies"] {
+      sqlx::query(&format!("DELETE FROM {table} WHERE session_id = ?1"))
+        .bind(id.to_string())
+        .execute(&mut *tx)
+        .await?;
+    }
+    sqlx::query("DELETE FROM sessions WHERE id = ?1")
+      .bind(id.to_string())
+      .execute(&mut *tx)
+      .await?;
+    tx.commit().await?;
     Ok(())
   }
 
@@ -320,12 +369,16 @@ impl Store {
   /// overwriting whatever was there before. The adapter is trusted to only
   /// report a title fresher than the one it last reported.
   pub async fn set_title(&self, id: SessionId, title: &str) -> Result<(), StoreError> {
-    sqlx::query("UPDATE sessions SET title = ?1, updated_at = ?2 WHERE id = ?3")
-      .bind(title)
-      .bind(OffsetDateTime::now_utc().unix_timestamp())
-      .bind(id.to_string())
-      .execute(&self.pool)
-      .await?;
+    let res =
+      sqlx::query("UPDATE sessions SET title = ?1, updated_at = ?2 WHERE id = ?3")
+        .bind(title)
+        .bind(OffsetDateTime::now_utc().unix_timestamp())
+        .bind(id.to_string())
+        .execute(&self.pool)
+        .await?;
+    if res.rows_affected() == 0 {
+      return Err(StoreError::SessionNotFound(id));
+    }
     Ok(())
   }
 
@@ -387,7 +440,7 @@ impl Store {
   pub async fn reconcile_boot(&self) -> Result<Vec<SessionRecord>, StoreError> {
     let rows = sqlx::query(
       "SELECT id, agent_kind, project_id, cwd, status, native_session_id, pgid, title, \
-       model, context_tokens_used, archived_at, created_at, updated_at
+       model, context_tokens_used, archived_at, pinned_at, created_at, updated_at
              FROM sessions WHERE status IN ('running', 'creating')",
     )
     .fetch_all(&self.pool)
@@ -974,6 +1027,7 @@ fn row_to_session(row: &sqlx::sqlite::SqliteRow) -> SessionRecord {
   let status: String = row.get("status");
   let pgid: Option<i64> = row.get("pgid");
   let archived_at: Option<i64> = row.get("archived_at");
+  let pinned_at: Option<i64> = row.get("pinned_at");
   let created_at: i64 = row.get("created_at");
   let updated_at: i64 = row.get("updated_at");
 
@@ -991,6 +1045,9 @@ fn row_to_session(row: &sqlx::sqlite::SqliteRow) -> SessionRecord {
     context_tokens_used: row.get("context_tokens_used"),
     archived_at: archived_at.map(|ts| {
       OffsetDateTime::from_unix_timestamp(ts).expect("valid archived_at timestamp")
+    }),
+    pinned_at: pinned_at.map(|ts| {
+      OffsetDateTime::from_unix_timestamp(ts).expect("valid pinned_at timestamp")
     }),
     created_at: OffsetDateTime::from_unix_timestamp(created_at)
       .expect("valid created_at timestamp"),

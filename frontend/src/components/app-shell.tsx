@@ -75,6 +75,15 @@ export function AppShell() {
     setTreeOpen(true)
     setActiveId(session.id)
   }
+
+  const handleSessionDeleted = (id: string) => {
+    if (activeId !== id) return
+    setActiveId(null)
+    setDraft(null)
+    setTreeOpen(false)
+    setOpenedFiles([])
+    setCurrentTab({ type: "session" })
+  }
   const switchActiveTab = (tab: CurrentTab) => {
     if (tab.type === "path") {
       setOpenedFiles((openedFiles) => {
@@ -97,6 +106,7 @@ export function AppShell() {
         projects={projects}
         activeId={activeId}
         onSelect={handleSelect}
+        onDeleted={handleSessionDeleted}
         onCreate={() => setNewSessionOpen(true)}
         onCreateProject={() => setNewProjectOpen(true)}
         loading={isLoading}
@@ -112,6 +122,7 @@ export function AppShell() {
           session={activeSession}
           draft={draft}
           onSessionCreated={handleSessionCreated}
+          onSessionDeleted={handleSessionDeleted}
           currentTab={currentTab}
           switchActiveTab={switchActiveTab}
           openedFiles={openedFiles}

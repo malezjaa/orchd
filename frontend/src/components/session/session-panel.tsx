@@ -74,6 +74,7 @@ export interface SessionPanelProps {
   session: SessionRecord | null
   draft: DraftSession | null
   onSessionCreated: (session: SessionRecord) => void
+  onSessionDeleted: (id: string) => void
   currentTab: CurrentTab
   switchActiveTab: (tab: CurrentTab) => void
   openedFiles: string[]
@@ -129,6 +130,7 @@ export function SessionPanel({
   session,
   draft,
   onSessionCreated,
+  onSessionDeleted,
   currentTab,
   switchActiveTab,
   openedFiles,
@@ -509,8 +511,9 @@ export function SessionPanel({
         session={session}
         busy={state.busy}
         onClose={() => closeSession()}
+        onDeleted={onSessionDeleted}
         onRegenerateTitle={
-          session.agent_kind === "claude_code"
+          session.agent_kind === "claude_code" || session.agent_kind === "codex"
             ? handleRegenerateTitle
             : undefined
         }

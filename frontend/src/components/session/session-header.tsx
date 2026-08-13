@@ -1,7 +1,7 @@
-import { PanelLeft, RefreshCw } from "lucide-react"
+import { PanelLeft } from "lucide-react"
 import { AnimatedSidebarTrigger } from "@/components/motion/animated-sidebar"
-import { Button } from "@/components/ui/button"
 import { Loader } from "@/components/motion/loader"
+import { SessionMenu } from "@/components/session/session-menu"
 import { TypewriterText } from "@/components/motion/typewriter-text"
 import { sessionDisplayName, type SessionRecord } from "@/lib/orchd"
 
@@ -10,6 +10,7 @@ export interface SessionHeaderProps {
   // The live socket's view, not the session's lifecycle `status`.
   busy: boolean
   onClose: (id: string) => void
+  onDeleted?: (id: string) => void
   // Omitted for agents that don't support it, since the command silently
   // no-ops there and a button that does nothing is worse than none.
   onRegenerateTitle?: () => void
@@ -23,6 +24,7 @@ export interface SessionHeaderProps {
 export function SessionHeader({
   session,
   busy,
+  onDeleted,
   onRegenerateTitle,
   titleRegenerating,
   justGeneratedTitle,
@@ -61,18 +63,17 @@ export function SessionHeader({
             {session.cwd}
           </p>
         </div>
-        {onRegenerateTitle && !titleRegenerating ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label="Regenerate title"
-            onClick={onRegenerateTitle}
-            className="size-7 shrink-0 rounded-lg text-muted-foreground opacity-0 transition-opacity group-hover/title:opacity-100 focus-visible:opacity-100"
-          >
-            <RefreshCw className="size-3.5" />
-          </Button>
-        ) : null}
+        <SessionMenu
+          session={session}
+          archived={session.archived_at !== null}
+          onDeleted={onDeleted}
+          onRegenerateTitle={
+            onRegenerateTitle && !titleRegenerating
+              ? onRegenerateTitle
+              : undefined
+          }
+          regenerating={titleRegenerating}
+        />
       </div>
       {busy ? (
         <Loader

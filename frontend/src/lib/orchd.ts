@@ -42,6 +42,7 @@ export interface SessionRecord {
   context: SessionContext | null
   // `null` while active. `listSessions` excludes archived sessions.
   archived_at: string | null
+  pinned_at: string | null
   // Runtime-only, so `false` for any session with no live actor. This is
   // the "agent is actually working" signal; `status` only tracks the
   // process lifecycle and stays `running` whether busy or idle.

@@ -22,9 +22,15 @@ use crate::{
 pub fn router() -> Router<AppState> {
   Router::new()
     .route("/sessions", post(create_session).get(list_sessions))
-    .route("/sessions/{id}", get(get_session))
+    .route(
+      "/sessions/{id}",
+      get(get_session).delete(delete_session).patch(rename_session),
+    )
     .route("/sessions/{id}/archive", post(archive_session))
     .route("/sessions/{id}/unarchive", post(unarchive_session))
+    .route("/sessions/{id}/pin", post(pin_session))
+    .route("/sessions/{id}/unpin", post(unpin_session))
+    .route("/sessions/{id}/regenerate-title", post(regenerate_title))
     .route("/projects", post(create_project).get(list_projects))
     .route("/projects/{id}", get(get_project).delete(delete_project))
     .route("/projects/{id}/archive", post(archive_project))
@@ -139,6 +145,65 @@ async fn unarchive_session(
   let id =
     SessionId::from_str(&id).map_err(|_| ApiError::bad_request("invalid session id"))?;
   state.registry.unarchive_session(id).await?;
+  Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+pub struct RenameSessionRequest {
+  pub title: String,
+}
+
+async fn rename_session(
+  State(state): State<AppState>,
+  Path(id): Path<String>,
+  Json(req): Json<RenameSessionRequest>,
+) -> Result<StatusCode, ApiError> {
+  let id =
+    SessionId::from_str(&id).map_err(|_| ApiError::bad_request("invalid session id"))?;
+  if req.title.trim().is_empty() {
+    return Err(ApiError::bad_request("session title cannot be empty"));
+  }
+  state.registry.rename_session(id, &req.title).await?;
+  Ok(StatusCode::NO_CONTENT)
+}
+
+async fn pin_session(
+  State(state): State<AppState>,
+  Path(id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+  let id =
+    SessionId::from_str(&id).map_err(|_| ApiError::bad_request("invalid session id"))?;
+  state.registry.set_session_pinned(id, true).await?;
+  Ok(StatusCode::NO_CONTENT)
+}
+
+async fn unpin_session(
+  State(state): State<AppState>,
+  Path(id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+  let id =
+    SessionId::from_str(&id).map_err(|_| ApiError::bad_request("invalid session id"))?;
+  state.registry.set_session_pinned(id, false).await?;
+  Ok(StatusCode::NO_CONTENT)
+}
+
+async fn delete_session(
+  State(state): State<AppState>,
+  Path(id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+  let id =
+    SessionId::from_str(&id).map_err(|_| ApiError::bad_request("invalid session id"))?;
+  state.registry.delete_session(id).await?;
+  Ok(StatusCode::NO_CONTENT)
+}
+
+async fn regenerate_title(
+  State(state): State<AppState>,
+  Path(id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+  let id =
+    SessionId::from_str(&id).map_err(|_| ApiError::bad_request("invalid session id"))?;
+  state.registry.regenerate_session_title(id).await?;
   Ok(StatusCode::NO_CONTENT)
 }
 

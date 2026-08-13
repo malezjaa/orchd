@@ -242,3 +242,65 @@ export function useUnarchiveSession() {
     },
   })
 }
+
+function updateSessionCaches(
+  queryClient: ReturnType<typeof useQueryClient>,
+  id: string,
+  update: (session: SessionRecord) => SessionRecord
+) {
+  for (const key of [queryKeys.sessions, queryKeys.archivedSessions]) {
+    queryClient.setQueryData<SessionRecord[]>(key, (current) =>
+      current?.map((session) => (session.id === id ? update(session) : session))
+    )
+  }
+}
+
+export function usePinSession() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, pinned }: { id: string; pinned: boolean }) =>
+      pinned ? api.pinSession(id) : api.unpinSession(id),
+    onSuccess: (_data, { id, pinned }) => {
+      updateSessionCaches(queryClient, id, (session) => ({
+        ...session,
+        pinned_at: pinned ? new Date().toISOString() : null,
+      }))
+    },
+  })
+}
+
+export function useRenameSession() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, title }: { id: string; title: string }) =>
+      api.renameSession(id, title),
+    onSuccess: (_data, { id, title }) => {
+      updateSessionCaches(queryClient, id, (session) => ({ ...session, title }))
+    },
+  })
+}
+
+export function useDeleteSession() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.deleteSession(id),
+    onSuccess: (_data, id) => {
+      for (const key of [queryKeys.sessions, queryKeys.archivedSessions]) {
+        queryClient.setQueryData<SessionRecord[]>(key, (current) =>
+          current?.filter((session) => session.id !== id)
+        )
+      }
+    },
+  })
+}
+
+export function useRegenerateSessionTitle() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.regenerateSessionTitle(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.archivedSessions })
+    },
+  })
+}

@@ -82,6 +82,12 @@ pub enum SessionCommand {
   Close {
     reason: crate::event::CloseReason,
   },
+  /// Sets a user-authored title. The REST API persists it first, then routes
+  /// this command through a live actor so the open session receives the same
+  /// `title_updated` event as generated titles.
+  RenameTitle {
+    title: String,
+  },
   /// Client-triggered: re-derive the session's title from how the
   /// conversation has evolved, replacing whatever title is set now (see
   /// the sidebar's "Regenerate title" action).

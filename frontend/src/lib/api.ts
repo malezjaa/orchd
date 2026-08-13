@@ -98,6 +98,24 @@ export const api = {
   unarchiveSession: (id: string) =>
     request<void>(`/sessions/${id}/unarchive`, { method: "POST" }),
 
+  pinSession: (id: string) =>
+    request<void>(`/sessions/${id}/pin`, { method: "POST" }),
+
+  unpinSession: (id: string) =>
+    request<void>(`/sessions/${id}/unpin`, { method: "POST" }),
+
+  renameSession: (id: string, title: string) =>
+    request<void>(`/sessions/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ title }),
+    }),
+
+  deleteSession: (id: string) =>
+    request<void>(`/sessions/${id}`, { method: "DELETE" }),
+
+  regenerateSessionTitle: (id: string) =>
+    request<void>(`/sessions/${id}/regenerate-title`, { method: "POST" }),
+
   createSession: (agentKind: AgentKind, projectId: string) =>
     request<SessionRecord>("/sessions", {
       method: "POST",

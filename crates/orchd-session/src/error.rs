@@ -11,4 +11,6 @@ pub enum RegistryError {
   ProjectNotFound(ProjectId),
   #[error("session actor is no longer running")]
   ActorGone,
+  #[error("session title cannot be empty")]
+  InvalidTitle,
 }

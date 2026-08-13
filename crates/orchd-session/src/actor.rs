@@ -96,6 +96,7 @@ pub struct SessionActor {
   /// Shared with the `SessionHandle` so the API layer can read busyness
   /// without a command round-trip.
   busy: Arc<AtomicBool>,
+  stopped: Arc<tokio::sync::Notify>,
   last_activity: Instant,
   /// The highest seq already folded by `maybe_compact`.
   compacted_up_to: u64,
@@ -112,6 +113,7 @@ impl SessionActor {
     self_tx: mpsc::Sender<SessionCommand>,
     events_tx: broadcast::Sender<SessionEvent>,
     busy: Arc<AtomicBool>,
+    stopped: Arc<tokio::sync::Notify>,
     config: ActorConfig,
     native_session_id: Option<String>,
     initial_title: Option<String>,
@@ -141,6 +143,7 @@ impl SessionActor {
       retry_count: 0,
       turn_in_flight: false,
       busy,
+      stopped,
       last_activity: Instant::now(),
       compacted_up_to: 0,
     })
@@ -165,7 +168,15 @@ impl SessionActor {
       None => self.run_unsupported().await,
     }
   }
+}
 
+impl Drop for SessionActor {
+  fn drop(&mut self) {
+    self.stopped.notify_one();
+  }
+}
+
+impl SessionActor {
   // ---- Echo (fake) adapter ---------------------------------------------
 
   async fn run_echo(mut self) {
@@ -257,7 +268,12 @@ impl SessionActor {
         self.finish(reason).await;
         true
       }
-      // Title generation shells out to a real `claude` subprocess, which the
+      SessionCommand::RenameTitle { title } => {
+        self.title_generation_epoch += 1;
+        self.apply_title(title).await;
+        false
+      }
+      // Title generation shells out to a real provider subprocess, which the
       // echo adapter never fires.
       SessionCommand::RegenerateTitle
       | SessionCommand::TitleGenerationCompleted { .. } => false,
@@ -352,6 +368,10 @@ impl SessionActor {
                   Some(SessionCommand::Close { reason }) => {
                       self.finish(reason).await;
                       return false;
+                  }
+                  Some(SessionCommand::RenameTitle { title }) => {
+                      self.title_generation_epoch += 1;
+                      self.apply_title(title).await;
                   }
                   Some(_) => {
                       tracing::debug!(session = %self.id, "command dropped: agent is restarting after a crash");
@@ -586,18 +606,21 @@ impl SessionActor {
       .join("\n\n")
   }
 
-  /// Fires a background, title-only Claude subprocess decoupled from this
-  /// session's own agent process, routing its result back through the actor's
-  /// command channel as `TitleGenerationCompleted`. Other agent kinds keep
-  /// whichever title `apply_first_message_title` set.
+  /// Fires a background, provider-specific title subprocess decoupled from
+  /// this session's own agent process, routing its result back through the
+  /// actor's command channel as `TitleGenerationCompleted`.
   ///
   /// `epoch` guards against a slow, superseded generation (two rapid
   /// "Regenerate title" clicks) clobbering a newer one: the result only
   /// applies if the epoch it carries still matches.
   fn spawn_title_generation(&mut self, kind: TitleGenerationKind) {
-    if self.agent_kind != AgentKind::ClaudeCode {
-      return;
-    }
+    let (program, agent_kind) = match self.agent_kind {
+      AgentKind::ClaudeCode => {
+        (orchd_adapters::claude_code::CLAUDE_BINARY, AgentKind::ClaudeCode)
+      }
+      AgentKind::Codex => (orchd_adapters::codex::CODEX_BINARY, AgentKind::Codex),
+      _ => return,
+    };
     self.title_generation_epoch += 1;
     let epoch = self.title_generation_epoch;
     let cwd = PathBuf::from(self.cwd.clone());
@@ -606,22 +629,39 @@ impl SessionActor {
 
     tokio::spawn(async move {
       let result = match kind {
-        TitleGenerationKind::Initial { message } => {
-          orchd_adapters::claude_code::generate_initial_title(
-            orchd_adapters::claude_code::CLAUDE_BINARY,
-            &cwd,
-            &message,
-          )
-          .await
-        }
+        TitleGenerationKind::Initial { message } => match agent_kind {
+          AgentKind::ClaudeCode => {
+            orchd_adapters::claude_code::generate_initial_title(program, &cwd, &message)
+              .await
+              .map_err(|err| err.to_string())
+          }
+          AgentKind::Codex => {
+            orchd_adapters::codex::generate_initial_title(program, &cwd, &message)
+              .await
+              .map_err(|err| err.to_string())
+          }
+          _ => unreachable!(),
+        },
         TitleGenerationKind::Regeneration { previous_title, transcript } => {
-          orchd_adapters::claude_code::regenerate_title(
-            orchd_adapters::claude_code::CLAUDE_BINARY,
-            &cwd,
-            &previous_title,
-            &transcript,
-          )
-          .await
+          match agent_kind {
+            AgentKind::ClaudeCode => orchd_adapters::claude_code::regenerate_title(
+              program,
+              &cwd,
+              &previous_title,
+              &transcript,
+            )
+            .await
+            .map_err(|err| err.to_string()),
+            AgentKind::Codex => orchd_adapters::codex::regenerate_title(
+              program,
+              &cwd,
+              &previous_title,
+              &transcript,
+            )
+            .await
+            .map_err(|err| err.to_string()),
+            _ => unreachable!(),
+          }
         }
       };
       let title = match result {
@@ -729,6 +769,11 @@ impl SessionActor {
         let _ = process.kill().await;
         self.finish(reason.clone()).await;
         return true;
+      }
+      SessionCommand::RenameTitle { title } => {
+        self.title_generation_epoch += 1;
+        self.apply_title(title.clone()).await;
+        return false;
       }
       SessionCommand::Interrupt
       | SessionCommand::SetMode { .. }
