@@ -48,6 +48,11 @@ export interface SessionStateOptions {
   titleRegenerating?: boolean
 }
 
+export interface TitleUpdate {
+  title: string
+  isLive: boolean
+}
+
 function wsUrl(sessionId: string, ticket: string): string {
   const url = new URL(`/sessions/${sessionId}/ws`, window.location.href)
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:"

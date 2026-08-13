@@ -18,23 +18,20 @@ import { TimelineItem } from "@/components/session/timeline-item"
 import { TurnWork } from "@/components/session/turn-work"
 import { FileTabs } from "@/components/session/file-tabs"
 import { FileView } from "@/components/session/file-view"
+import { useActiveSession } from "@/lib/active-session-context"
 import {
   agentIcon,
-  type AgentKind,
   type AgentMode,
   DEFAULT_ANTHROPIC_MODEL,
   DEFAULT_CODEX_MODEL,
   type ModelInfo,
   type PolicyRule,
-  type ProjectRecord,
-  type SessionRecord,
   type ThinkingEffort,
 } from "@/lib/orchd"
 import { useCreateSession, useModels, useProjectTree } from "@/lib/queries"
 import { finalAssistantTextIds, isHiddenToolCall } from "@/lib/timeline"
 import { groupTimelineByTurn, turnDurationSeconds } from "@/lib/timeline-groups"
-import { useSessionState } from "@/lib/use-session-socket"
-import type { CurrentTab } from "@/components/app-shell.tsx"
+import { useWorkspace, type DraftSession } from "@/lib/workspace-context"
 
 // Stable identity so the loading fallback doesn't defeat memoization.
 const EMPTY_MODELS: ModelInfo[] = []
@@ -55,25 +52,6 @@ const EMPTY_PENDING_SETTINGS: PendingSessionSettings = {
   effort: null,
   fastMode: false,
   permissionRules: null,
-}
-
-// A palette pick that has no backend session yet. Created lazily on the
-// first message send so an abandoned draft never persists.
-export interface DraftSession {
-  project: ProjectRecord
-  agentKind: AgentKind
-}
-
-export interface SessionPanelProps {
-  session: SessionRecord | null
-  draft: DraftSession | null
-  onSessionCreated: (session: SessionRecord) => void
-  onSessionDeleted: (id: string) => void
-  currentTab: CurrentTab
-  switchActiveTab: (tab: CurrentTab) => void
-  openedFiles: string[]
-  setOpenedFiles: (files: string[]) => void
-  treeRoot: string | null
 }
 
 const LIVE_STATUSES = new Set(["creating", "running", "interrupted"])
@@ -120,17 +98,16 @@ function DraftHeader({ draft }: { draft: DraftSession }) {
   )
 }
 
-export function SessionPanel({
-  session,
-  draft,
-  onSessionCreated,
-  onSessionDeleted,
-  currentTab,
-  switchActiveTab,
-  openedFiles,
-  setOpenedFiles,
-  treeRoot,
-}: SessionPanelProps) {
+export function SessionPanel() {
+  const {
+    activeSession: session,
+    draft,
+    currentTab,
+    switchActiveTab,
+    treeRoot,
+    sessionCreated,
+    sessionDeleted,
+  } = useWorkspace()
   const createSession = useCreateSession()
   // Draft sessions do not have a live session cwd yet, but their selected
   // project is already the correct root for file references.
@@ -191,21 +168,6 @@ export function SessionPanel({
   }
   useEffect(() => clearRegenerationTimeout, [clearRegenerationTimeout])
 
-  const onTitleUpdated = useCallback(
-    (title: string, isLive: boolean) => {
-      // A reconnect replays every historical `title_updated`, and the
-      // sessions cache already holds the final title, so applying the
-      // replayed ones would flash the title through its whole history.
-      if (!isLive) return
-      setTitleAnim((prev) => {
-        if (!prev.regenerating) return prev
-        clearRegenerationTimeout()
-        return { regenerating: false, justGenerated: title }
-      })
-    },
-    [clearRegenerationTimeout]
-  )
-
   const {
     status,
     state,
@@ -217,10 +179,23 @@ export function SessionPanel({
     updatePolicy,
     closeSession,
     regenerateTitle,
-  } = useSessionState(sessionId, {
-    onTitleUpdated,
-    titleRegenerating: titleAnim.regenerating,
-  })
+    titleUpdate,
+    stopTitleRegeneration,
+  } = useActiveSession()
+
+  useEffect(() => {
+    // Historical title events are intentionally ignored. They are replayed
+    // when the socket reconnects and should not restart the animation.
+    if (!titleUpdate?.isLive || !titleAnim.regenerating) return
+    clearRegenerationTimeout()
+    stopTitleRegeneration()
+    setTitleAnim({ regenerating: false, justGenerated: titleUpdate.title })
+  }, [
+    clearRegenerationTimeout,
+    stopTitleRegeneration,
+    titleAnim.regenerating,
+    titleUpdate,
+  ])
 
   const modelsQuery = useModels()
   const models = modelsQuery.data ?? EMPTY_MODELS
@@ -274,9 +249,10 @@ export function SessionPanel({
       setTitleAnim((prev) =>
         prev.regenerating ? { regenerating: false, justGenerated: null } : prev
       )
+      stopTitleRegeneration()
       toast.error("Couldn't regenerate title")
     }, 55_000)
-  }, [regenerateTitle, clearRegenerationTimeout])
+  }, [regenerateTitle, clearRegenerationTimeout, stopTitleRegeneration])
 
   const handleTitleAnimationComplete = useCallback(() => {
     setTitleAnim((prev) =>
@@ -339,16 +315,6 @@ export function SessionPanel({
     [respondApproval]
   )
 
-  const closeFile = useCallback(
-    (file: string) => {
-      setOpenedFiles(openedFiles.filter((f) => f !== file))
-      if (currentTab.type === "path" && currentTab.file === file) {
-        switchActiveTab({ type: "session" })
-      }
-    },
-    [currentTab, openedFiles, setOpenedFiles, switchActiveTab]
-  )
-
   const visibleEvents = useMemo(
     () => state.events.filter((event) => !isHiddenToolCall(event)),
     [state.events]
@@ -372,7 +338,7 @@ export function SessionPanel({
         projectId: draft.project.id,
       })
       setPendingFirstMessage(trimmed)
-      onSessionCreated(created)
+      sessionCreated(created)
     } catch (err) {
       toast.error("Couldn't create session", {
         description: err instanceof Error ? err.message : undefined,
@@ -467,7 +433,7 @@ export function SessionPanel({
         session={session}
         busy={state.busy}
         onClose={() => closeSession()}
-        onDeleted={onSessionDeleted}
+        onDeleted={sessionDeleted}
         onRegenerateTitle={
           session.agent_kind === "claude_code" || session.agent_kind === "codex"
             ? handleRegenerateTitle
@@ -478,12 +444,7 @@ export function SessionPanel({
         onTitleAnimationComplete={handleTitleAnimationComplete}
       />
 
-      <FileTabs
-        currentTab={currentTab}
-        switchActiveTab={switchActiveTab}
-        openedFiles={openedFiles}
-        onClose={closeFile}
-      />
+      <FileTabs />
 
       <div className="flex min-h-0 flex-1">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">

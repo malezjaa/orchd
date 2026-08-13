@@ -1,4 +1,3 @@
-import { useState } from "react"
 import {
   CircleCheckIcon,
   InfoIcon,
@@ -14,127 +13,46 @@ import {
 } from "@/components/motion/animated-sidebar"
 import { NewProjectPalette } from "@/components/project/new-project-palette"
 import { NewSessionPalette } from "@/components/session/new-session-palette"
-import {
-  type DraftSession,
-  SessionPanel,
-} from "@/components/session/session-panel"
+import { SessionPanel } from "@/components/session/session-panel"
 import { SettingsEffects } from "@/components/settings/settings-effects"
 import { useTheme } from "@/components/theme-provider"
-import type { AgentKind, ProjectRecord, SessionRecord } from "@/lib/orchd"
-import { basename } from "@/lib/orchd"
-import { useArchivedSessions, useProjects, useSessions } from "@/lib/queries"
-
-export type CurrentTab = { type: "session" } | { type: "path"; file: string }
+import { ActiveSessionProvider } from "@/lib/active-session-provider"
+import { useWorkspace } from "@/lib/workspace-context"
+import { WorkspaceProvider } from "@/lib/workspace-provider"
 
 export function AppShell() {
-  const { data: sessions = [], isLoading } = useSessions()
-  const { data: projects = [] } = useProjects()
-  const [activeId, setActiveId] = useState<string | null>(null)
-  const [draft, setDraft] = useState<DraftSession | null>(null)
-  const [newSessionOpen, setNewSessionOpen] = useState(false)
-  const [newProjectOpen, setNewProjectOpen] = useState(false)
-  const [openedFiles, setOpenedFiles] = useState<string[]>([])
-  const [currentTab, setCurrentTab] = useState<CurrentTab>({ type: "session" })
-  const [treeOpen, setTreeOpen] = useState(false)
+  return (
+    <WorkspaceProvider>
+      <WorkspaceLayout />
+    </WorkspaceProvider>
+  )
+}
+
+function WorkspaceLayout() {
+  const {
+    activeSession,
+    newProjectOpen,
+    newSessionOpen,
+    closeNewSession,
+    setNewProjectOpen,
+    startDraft,
+  } = useWorkspace()
   const { theme } = useTheme()
-
-  // The normal list excludes archived sessions, but the History view
-  // opens exactly those, so the lookup has to search both lists or an
-  // archived session resolves to nothing and the panel shows empty.
-  const { data: archivedSessions = [] } = useArchivedSessions(true)
-
-  const activeSession =
-    sessions.find((session) => session.id === activeId) ??
-    archivedSessions.find((session) => session.id === activeId) ??
-    null
-
-  // The tree roots at the session's project folder, falling back to its cwd
-  // when the session has no registered project (e.g. legacy records).
-  const activeProject = activeSession?.project_id
-    ? (projects.find((project) => project.id === activeSession.project_id) ??
-      null)
-    : null
-  const treeRoot = activeProject?.path ?? activeSession?.cwd ?? null
-  const treeTitle =
-    activeProject?.name ?? (activeSession ? basename(activeSession.cwd) : "")
-
-  const handleSelect = (id: string) => {
-    setDraft(null)
-    setTreeOpen(true)
-    setActiveId(id)
-  }
-
-  const handleDraftStart = (project: ProjectRecord, agentKind: AgentKind) => {
-    setActiveId(null)
-    setTreeOpen(false)
-    setDraft({ project, agentKind })
-  }
-
-  const handleSessionCreated = (session: SessionRecord) => {
-    setDraft(null)
-    setTreeOpen(true)
-    setActiveId(session.id)
-  }
-
-  const handleSessionDeleted = (id: string) => {
-    if (activeId !== id) return
-    setActiveId(null)
-    setDraft(null)
-    setTreeOpen(false)
-    setOpenedFiles([])
-    setCurrentTab({ type: "session" })
-  }
-  const switchActiveTab = (tab: CurrentTab) => {
-    if (tab.type === "path") {
-      setOpenedFiles((openedFiles) => {
-        if (openedFiles.includes(tab.file)) {
-          return openedFiles
-        }
-
-        return [...openedFiles, tab.file]
-      })
-    }
-
-    setCurrentTab(tab)
-  }
 
   return (
     <AnimatedSidebarProvider className="h-svh overflow-hidden">
       <SettingsEffects />
-      <AppSidebar
-        sessions={sessions}
-        projects={projects}
-        activeId={activeId}
-        onSelect={handleSelect}
-        onDeleted={handleSessionDeleted}
-        onCreate={() => setNewSessionOpen(true)}
-        onCreateProject={() => setNewProjectOpen(true)}
-        loading={isLoading}
-        treeOpen={treeOpen}
-        treeRoot={treeRoot}
-        treeTitle={treeTitle}
-        onTreeBack={() => setTreeOpen(false)}
-        currentTab={currentTab}
-        switchActiveTab={switchActiveTab}
-      />
+      <AppSidebar />
       <AnimatedSidebarInset>
-        <SessionPanel
-          session={activeSession}
-          draft={draft}
-          onSessionCreated={handleSessionCreated}
-          onSessionDeleted={handleSessionDeleted}
-          currentTab={currentTab}
-          switchActiveTab={switchActiveTab}
-          openedFiles={openedFiles}
-          setOpenedFiles={setOpenedFiles}
-          treeRoot={treeRoot}
-        />
+        <ActiveSessionProvider sessionId={activeSession?.id ?? null}>
+          <SessionPanel />
+        </ActiveSessionProvider>
       </AnimatedSidebarInset>
 
       <NewSessionPalette
         open={newSessionOpen}
-        onClose={() => setNewSessionOpen(false)}
-        onDraftStart={handleDraftStart}
+        onClose={closeNewSession}
+        onDraftStart={startDraft}
       />
 
       <NewProjectPalette

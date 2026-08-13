@@ -5,20 +5,17 @@ import { TooltipIcon } from "@/components/tooltip-icon"
 import { Input } from "@/components/ui/input"
 import type { GitStatusEntry } from "@/lib/orchd"
 import { useProjectTree } from "@/lib/queries"
-import type { CurrentTab } from "@/components/app-shell.tsx"
+import { useWorkspace } from "@/lib/workspace-context"
 import { Separator } from "@/components/ui/separator"
 
 function FileTreeView({
   paths,
   gitStatus,
-  currentTab,
-  switchActiveTab,
 }: {
   paths: readonly string[]
   gitStatus?: readonly GitStatusEntry[]
-  currentTab: CurrentTab
-  switchActiveTab: (tab: CurrentTab) => void
 }) {
+  const { currentTab, switchActiveTab } = useWorkspace()
   const { model } = useFileTree({
     paths,
     gitStatus,
@@ -78,16 +75,12 @@ export interface ProjectTreePanelProps {
   rootPath: string
   title: string
   onBack: () => void
-  currentTab: CurrentTab
-  switchActiveTab: (tab: CurrentTab) => void
 }
 
 export function ProjectTreePanel({
   rootPath,
   title,
   onBack,
-  currentTab,
-  switchActiveTab,
 }: ProjectTreePanelProps) {
   const { data, isLoading, isError } = useProjectTree(rootPath, true)
 
@@ -115,12 +108,7 @@ export function ProjectTreePanel({
           Couldn't load project files.
         </div>
       ) : (
-        <FileTreeView
-          paths={data.files}
-          gitStatus={data.git ?? undefined}
-          currentTab={currentTab}
-          switchActiveTab={switchActiveTab}
-        />
+        <FileTreeView paths={data.files} gitStatus={data.git ?? undefined} />
       )}
     </div>
   )

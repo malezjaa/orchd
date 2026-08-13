@@ -2,7 +2,7 @@ import { MessageSquare, XIcon } from "lucide-react"
 import { getFileIcon } from "@/lib/file-icon.tsx"
 import { cn } from "@/lib/utils.ts"
 import { Separator } from "@/components/ui/separator.tsx"
-import type { CurrentTab } from "@/components/app-shell.tsx"
+import { useWorkspace, type CurrentTab } from "@/lib/workspace-context"
 
 function OpenedFile({
   file,
@@ -64,17 +64,9 @@ function OpenedFile({
   )
 }
 
-export function FileTabs({
-  currentTab,
-  switchActiveTab,
-  openedFiles,
-  onClose,
-}: {
-  currentTab: CurrentTab
-  switchActiveTab: (tab: CurrentTab) => void
-  openedFiles: string[]
-  onClose: (file: string) => void
-}) {
+export function FileTabs() {
+  const { currentTab, switchActiveTab, openedFiles, closeFile } = useWorkspace()
+
   return (
     <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border px-2">
       <button
@@ -103,7 +95,7 @@ export function FileTabs({
             file={file}
             currentTab={currentTab}
             switchActiveTab={switchActiveTab}
-            onClose={onClose}
+            onClose={closeFile}
           />
         ))}
       </div>

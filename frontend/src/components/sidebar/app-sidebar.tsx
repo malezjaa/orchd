@@ -11,27 +11,9 @@ import {
 import { ProjectTreePanel } from "@/components/session/project-tree.tsx"
 import { SessionList } from "@/components/sidebar/session-list.tsx"
 import { useArchivedSessions } from "@/lib/queries.ts"
-import type { ProjectRecord, SessionRecord } from "@/lib/orchd.ts"
 import { TooltipIcon } from "@/components/tooltip-icon.tsx"
 import { IconActionButton } from "@/components/icon-action-button.tsx"
-import type { CurrentTab } from "@/components/app-shell.tsx"
-
-export interface AppSidebarProps {
-  sessions: SessionRecord[]
-  projects: ProjectRecord[]
-  activeId: string | null
-  onSelect: (id: string) => void
-  onDeleted: (id: string) => void
-  onCreate: () => void
-  onCreateProject: () => void
-  loading?: boolean
-  treeOpen: boolean
-  treeRoot: string | null
-  treeTitle: string
-  onTreeBack: () => void
-  currentTab: CurrentTab
-  switchActiveTab: (tab: CurrentTab) => void
-}
+import { useWorkspace } from "@/lib/workspace-context"
 
 function SidebarSettingsButton({ onOpen }: { onOpen: () => void }) {
   const { collapsed } = useAnimatedSidebarPanel()
@@ -54,22 +36,21 @@ function SidebarSettingsButton({ onOpen }: { onOpen: () => void }) {
   )
 }
 
-export function AppSidebar({
-  sessions,
-  projects,
-  activeId,
-  onSelect,
-  onDeleted,
-  onCreate,
-  onCreateProject,
-  loading,
-  treeOpen,
-  treeRoot,
-  treeTitle,
-  onTreeBack,
-  currentTab,
-  switchActiveTab,
-}: AppSidebarProps) {
+export function AppSidebar() {
+  const {
+    sessions,
+    projects,
+    activeId,
+    sessionsLoading,
+    selectSession,
+    sessionDeleted,
+    openNewSession,
+    setNewProjectOpen,
+    treeOpen,
+    treeRoot,
+    treeTitle,
+    closeTree,
+  } = useWorkspace()
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [historyOnly, setHistoryOnly] = useState(false)
@@ -88,24 +69,22 @@ export function AppSidebar({
           <ProjectTreePanel
             rootPath={treeRoot}
             title={treeTitle}
-            onBack={onTreeBack}
-            currentTab={currentTab}
-            switchActiveTab={switchActiveTab}
+            onBack={closeTree}
           />
         ) : (
           <SessionList
             sessions={historyOnly ? (archivedSessions.data ?? []) : sessions}
             projects={projects}
             activeId={activeId}
-            onSelect={onSelect}
-            onDeleted={onDeleted}
+            onSelect={selectSession}
+            onDeleted={sessionDeleted}
             searchOpen={searchOpen}
             searchQuery={searchQuery}
             onSearchQueryChange={setSearchQuery}
-            loading={historyOnly ? archivedSessions.isLoading : loading}
-            onCreate={onCreate}
+            loading={historyOnly ? archivedSessions.isLoading : sessionsLoading}
+            onCreate={openNewSession}
             onToggleSearch={() => setSearchOpen((open) => !open)}
-            onCreateProject={onCreateProject}
+            onCreateProject={() => setNewProjectOpen(true)}
             historyOnly={historyOnly}
             onToggleHistory={() => setHistoryOnly((only) => !only)}
           />
