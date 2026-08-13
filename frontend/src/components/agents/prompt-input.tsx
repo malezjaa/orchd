@@ -212,6 +212,13 @@ export interface PromptAction {
   disabled?: boolean
 }
 
+interface PromptPickerGroup {
+  label: string
+  value?: string
+  options: PromptOption[]
+  onChange: (value: string) => void
+}
+
 export interface PromptInputProps extends Omit<
   TextareaHTMLAttributes<HTMLTextAreaElement>,
   "value" | "defaultValue" | "onChange" | "onSubmit" | "children"
@@ -255,31 +262,38 @@ export interface PromptInputProps extends Omit<
   className?: string
 }
 
-// Compact, icon-aware picker for the toolbar's secondary pickers. Built on the
-// plain shadcn `Popover` rather than `Select` because item content here is
+// Compact, icon-aware picker for related toolbar settings. Built on the plain
+// shadcn `Popover` rather than `Select` because item content here is
 // multi-line and `Select`'s item text forces `whitespace-nowrap`/`shrink-0`,
 // which pushed long descriptions past the popup edge. Renders nothing when
-// given no options, so callers can opt in per-picker for free.
-function ToolbarPicker({
-  value,
-  onChange,
-  options,
+// all of its groups are empty.
+function ToolbarGroupPicker({
+  label,
+  groups,
   disabled,
-  placeholder,
   triggerClassName,
   contentClassName,
 }: {
-  value?: string
-  onChange: (next: string) => void
-  options: PromptOption[]
+  label: string
+  groups: PromptPickerGroup[]
   disabled?: boolean
-  placeholder: string
   triggerClassName?: string
   contentClassName?: string
 }) {
   const [open, setOpen] = useState(false)
-  if (!options.length) return null
-  const current = options.find((option) => option.value === value)
+  const visibleGroups = groups.filter((group) => group.options.length > 0)
+  if (!visibleGroups.length) return null
+
+  const selected = visibleGroups
+    .map((group) =>
+      group.options.find((option) => option.value === group.value)
+    )
+    .filter((option): option is PromptOption => option !== undefined)
+  const summary = selected
+    .map((option) => (typeof option.label === "string" ? option.label : null))
+    .filter((value): value is string => value !== null)
+    .join(" · ")
+  const icon = selected[0]?.icon
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -290,55 +304,65 @@ function ToolbarPicker({
           triggerClassName
         )}
       >
-        {current?.icon ? (
+        {icon ? (
           <span className="grid size-4 shrink-0 place-items-center [&_svg]:size-3.5">
-            {current.icon}
+            {icon}
           </span>
         ) : null}
-        <span className="min-w-0 truncate">
-          {current?.label ?? placeholder}
-        </span>
+        <span className="min-w-0 truncate">{summary || label}</span>
         <ChevronDown className="size-3.5 shrink-0 text-muted-foreground/70" />
       </PopoverTrigger>
       <PopoverContent
         align="start"
         sideOffset={8}
-        className={cn("w-64 gap-0 rounded-xl p-1.5", contentClassName)}
+        className={cn("w-72 gap-0 rounded-xl p-1.5", contentClassName)}
       >
-        {options.map((option) => {
-          const selected = option.value === value
-          return (
-            <button
-              key={option.value}
-              type="button"
-              disabled={option.disabled}
-              onClick={() => {
-                onChange(option.value)
-                setOpen(false)
-              }}
-              className="flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors outline-none hover:bg-muted focus-visible:bg-muted disabled:pointer-events-none disabled:opacity-50"
-            >
-              {option.icon ? (
-                <span className="mt-0.5 grid size-5 shrink-0 place-items-center text-muted-foreground [&_svg]:size-4">
-                  {option.icon}
-                </span>
-              ) : null}
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm text-foreground">
-                  {option.label}
-                </span>
-                {option.description ? (
-                  <span className="mt-0.5 block text-xs leading-4 break-words text-muted-foreground">
-                    {option.description}
+        {visibleGroups.map((group, groupIndex) => (
+          <div
+            key={group.label}
+            className={cn(groupIndex > 0 && "mt-1 border-t border-border pt-1")}
+          >
+            <div className="px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+              {group.label}
+            </div>
+            {group.options.map((option) => {
+              const isSelected = option.value === group.value
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  disabled={option.disabled}
+                  onClick={() => {
+                    group.onChange(option.value)
+                    setOpen(false)
+                  }}
+                  className="flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors outline-none hover:bg-muted focus-visible:bg-muted disabled:pointer-events-none disabled:opacity-50"
+                >
+                  {option.icon ? (
+                    <span className="mt-0.5 grid size-5 shrink-0 place-items-center text-muted-foreground [&_svg]:size-4">
+                      {option.icon}
+                    </span>
+                  ) : null}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm text-foreground">
+                      {option.label}
+                    </span>
+                    {option.description ? (
+                      <span className="mt-0.5 block text-xs leading-4 break-words text-muted-foreground">
+                        {option.description}
+                      </span>
+                    ) : null}
                   </span>
-                ) : null}
-              </span>
-              <span className="mt-0.5 grid size-4 shrink-0 place-items-center">
-                {selected ? <Check className="size-4 text-foreground" /> : null}
-              </span>
-            </button>
-          )
-        })}
+                  <span className="mt-0.5 grid size-4 shrink-0 place-items-center">
+                    {isSelected ? (
+                      <Check className="size-4 text-foreground" />
+                    ) : null}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        ))}
       </PopoverContent>
     </Popover>
   )
@@ -897,33 +921,41 @@ export function PromptInput({
           disabled={disabled || loading}
           triggerClassName="font-medium"
         />
-        <ToolbarPicker
-          value={currentMode}
-          onChange={setMode}
-          options={modes}
+        <ToolbarGroupPicker
+          label="Behavior"
+          groups={[
+            {
+              label: "Mode",
+              value: currentMode,
+              options: modes,
+              onChange: setMode,
+            },
+            {
+              label: "Permissions",
+              value: currentPermissionMode,
+              options: permissionModes,
+              onChange: setPermissionMode,
+            },
+          ]}
           disabled={disabled || loading}
-          placeholder="Mode"
         />
-        <ToolbarPicker
-          value={currentPermissionMode}
-          onChange={setPermissionMode}
-          options={permissionModes}
+        <ToolbarGroupPicker
+          label="Performance"
+          groups={[
+            {
+              label: "Reasoning",
+              value: currentThinkingLevel,
+              options: thinkingLevels,
+              onChange: setThinkingLevel,
+            },
+            {
+              label: "Speed",
+              value: currentSpeedMode,
+              options: speedModes,
+              onChange: setSpeedMode,
+            },
+          ]}
           disabled={disabled || loading}
-          placeholder="Permissions"
-        />
-        <ToolbarPicker
-          value={currentSpeedMode}
-          onChange={setSpeedMode}
-          options={speedModes}
-          disabled={disabled || loading}
-          placeholder="Speed"
-        />
-        <ToolbarPicker
-          value={currentThinkingLevel}
-          onChange={setThinkingLevel}
-          options={thinkingLevels}
-          disabled={disabled || loading}
-          placeholder="Thinking"
         />
 
         <div className="ml-auto flex shrink-0 items-center gap-1">
