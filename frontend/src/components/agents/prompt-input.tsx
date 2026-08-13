@@ -13,12 +13,8 @@ import {
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import {
   type FormEvent,
-  type KeyboardEvent,
   type ReactNode,
   type TextareaHTMLAttributes,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -34,6 +30,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { PromptEditor } from "@/components/agents/prompt-editor"
 import { SPRING_SWAP } from "@/lib/ease"
 import { cn } from "@/lib/utils"
 
@@ -259,6 +256,7 @@ export interface PromptInputProps extends Omit<
   // How much of the current model's context window this turn's prompt has
   // used. Omit while unknown, when no model or usage has been reported yet.
   contextUsage?: PromptContextUsage | null
+  filePaths?: readonly string[]
   className?: string
 }
 
@@ -707,16 +705,13 @@ export function PromptInput({
   maxRows = 8,
   leadingAction,
   contextUsage,
+  filePaths = [],
   className,
   disabled,
   placeholder = "Ask the agent to do something… use @ for files, / for commands",
   "aria-label": ariaLabel = "Prompt",
-  onKeyDown,
-  ...textareaProps
 }: PromptInputProps) {
   const reduce = useReducedMotion() ?? false
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const measurementRef = useRef<HTMLDivElement>(null)
   const [internalValue, setInternalValue] = useState(defaultValue)
   const [internalModel, setInternalModel] = useState(
     defaultModel ?? models[0]?.value
@@ -741,32 +736,6 @@ export function PromptInput({
   const currentSpeedMode = speedMode ?? internalSpeedMode
   const currentThinkingLevel = thinkingLevel ?? internalThinkingLevel
   const canSubmit = Boolean(currentValue.trim()) && !disabled && !loading
-
-  const resizeTextarea = useCallback(() => {
-    const textarea = textareaRef.current
-    const measurement = measurementRef.current
-    if (!textarea || !measurement || textarea.value !== currentValue) return
-
-    const lineHeight = 24
-    const nextHeight = Math.min(
-      Math.max(measurement.scrollHeight, minRows * lineHeight),
-      maxRows * lineHeight
-    )
-    const height = `${nextHeight}px`
-    if (textarea.style.height !== height) textarea.style.height = height
-  }, [currentValue, maxRows, minRows])
-
-  useLayoutEffect(() => {
-    resizeTextarea()
-  }, [resizeTextarea])
-
-  useEffect(() => {
-    const textarea = textareaRef.current
-    if (!textarea || typeof ResizeObserver === "undefined") return
-    const observer = new ResizeObserver(resizeTextarea)
-    observer.observe(textarea)
-    return () => observer.disconnect()
-  }, [resizeTextarea])
 
   const setValue = (next: string) => {
     if (value === undefined) setInternalValue(next)
@@ -803,52 +772,29 @@ export function PromptInput({
     const prompt = currentValue.trim()
     if (!prompt || disabled || loading) return
 
-    onSubmit?.(prompt, currentModelValue)
+    void onSubmit?.(prompt, currentModelValue)
     if (value === undefined) setInternalValue("")
-    textareaRef.current?.focus({ preventScroll: true })
-  }
-
-  const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    onKeyDown?.(event)
-    if (
-      event.defaultPrevented ||
-      event.key !== "Enter" ||
-      event.shiftKey ||
-      event.nativeEvent.isComposing
-    ) {
-      return
-    }
-    event.preventDefault()
-    submit()
   }
 
   return (
     <form
       onSubmit={submit}
       className={cn(
-        "relative w-full rounded-3xl bg-card p-3 text-card-foreground shadow-md ring-1 ring-foreground/5 transition-shadow focus-within:shadow-lg dark:ring-foreground/10",
+        "relative w-full rounded-3xl bg-card p-3 text-card-foreground shadow-md ring-1 ring-foreground/5 dark:ring-foreground/10",
         disabled && "opacity-60",
         className
       )}
     >
-      <div
-        ref={measurementRef}
-        aria-hidden="true"
-        className="pointer-events-none invisible absolute inset-x-2 top-0 px-2 text-sm leading-6 [overflow-wrap:break-word] whitespace-pre-wrap"
-      >
-        {`${currentValue}\u200b`}
-      </div>
-      <textarea
-        ref={textareaRef}
+      <PromptEditor
         value={currentValue}
-        disabled={disabled}
+        onValueChange={setValue}
+        onSubmit={() => submit()}
+        filePaths={filePaths}
+        minRows={minRows}
+        maxRows={maxRows}
         placeholder={placeholder}
-        aria-label={ariaLabel}
-        rows={minRows}
-        {...textareaProps}
-        onChange={(event) => setValue(event.target.value)}
-        onKeyDown={handleKeyDown}
-        className="scrollbar-hide block w-full resize-none overflow-y-auto bg-transparent px-1 pt-1 pb-2 text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground/55"
+        ariaLabel={ariaLabel}
+        disabled={disabled}
       />
 
       <div className="mt-1.5 flex min-h-8 flex-wrap items-center gap-1">

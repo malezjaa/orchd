@@ -50,6 +50,7 @@ export interface SessionComposerProps {
   onModeChange?: (mode: AgentMode) => void
   onPermissionPreset?: (rules: PolicyRule[]) => void
   contextUsage?: PromptContextUsage | null
+  filePaths?: readonly string[]
 }
 
 const MODES: PromptOption[] = [
@@ -191,6 +192,7 @@ export function SessionComposer({
   onModeChange,
   onPermissionPreset,
   contextUsage,
+  filePaths,
 }: SessionComposerProps) {
   const [selectedModel, setSelectedModel] = useState<string | undefined>(
     currentModel ?? undefined
@@ -311,6 +313,7 @@ export function SessionComposer({
             onThinkingChange?.(effort)
           }}
           contextUsage={contextUsage}
+          filePaths={filePaths}
         />
       </div>
     </div>

@@ -31,7 +31,12 @@ import {
   type SessionRecord,
   type ThinkingEffort,
 } from "@/lib/orchd"
-import { queryKeys, useCreateSession, useModels } from "@/lib/queries"
+import {
+  queryKeys,
+  useCreateSession,
+  useModels,
+  useProjectTree,
+} from "@/lib/queries"
 import { finalAssistantTextIds, isHiddenToolCall } from "@/lib/timeline"
 import { groupTimelineByTurn, turnDurationSeconds } from "@/lib/timeline-groups"
 import { useSessionSocket } from "@/lib/use-session-socket"
@@ -132,6 +137,13 @@ export function SessionPanel({
 }: SessionPanelProps) {
   const queryClient = useQueryClient()
   const createSession = useCreateSession()
+  // Draft sessions do not have a live session cwd yet, but their selected
+  // project is already the correct root for file references.
+  const fileTreeRoot = treeRoot ?? draft?.project.path ?? null
+  const { data: projectTree } = useProjectTree(
+    fileTreeRoot ?? undefined,
+    Boolean(fileTreeRoot)
+  )
   // Typed before the session existed; sent once its socket comes up.
   const [pendingFirstMessage, setPendingFirstMessage] = useState<string | null>(
     null
@@ -412,9 +424,23 @@ export function SessionPanel({
 
   const activeFile = currentTab.type === "path" ? currentTab.file : null
   const activeFilePath =
-    treeRoot && activeFile
-      ? `${treeRoot.replace(/\/+$/, "")}/${activeFile}`
+    fileTreeRoot && activeFile
+      ? `${fileTreeRoot.replace(/\/+$/, "")}/${activeFile}`
       : null
+
+  const handleFileOpen = useCallback(
+    (path: string) => {
+      const root = fileTreeRoot?.replace(/\/+$/, "")
+      const relative =
+        root && path.startsWith(`${root}/`)
+          ? path.slice(root.length + 1)
+          : path.replace(/^\.\//, "")
+      if (projectTree?.files.includes(relative)) {
+        switchActiveTab({ type: "path", file: relative })
+      }
+    },
+    [fileTreeRoot, projectTree?.files, switchActiveTab]
+  )
 
   if (!session && !draft) {
     return (
@@ -469,6 +495,7 @@ export function SessionPanel({
           onPermissionPreset={(permissionRules) =>
             setDraftSettings((prev) => ({ ...prev, permissionRules }))
           }
+          filePaths={projectTree?.files}
         />
       </div>
     )
@@ -525,6 +552,7 @@ export function SessionPanel({
                             onApprove={handleApprove}
                             onAlwaysAllow={handleAlwaysAllow}
                             onDeny={handleDeny}
+                            onFileOpen={handleFileOpen}
                           />
                         ) : null}
                         {group.work.length > 0 || working ? (
@@ -544,6 +572,7 @@ export function SessionPanel({
                                 onApprove={handleApprove}
                                 onAlwaysAllow={handleAlwaysAllow}
                                 onDeny={handleDeny}
+                                onFileOpen={handleFileOpen}
                               />
                             ))}
                           </TurnWork>
@@ -556,6 +585,7 @@ export function SessionPanel({
                             onApprove={handleApprove}
                             onAlwaysAllow={handleAlwaysAllow}
                             onDeny={handleDeny}
+                            onFileOpen={handleFileOpen}
                           />
                         ))}
                       </Fragment>
@@ -578,12 +608,13 @@ export function SessionPanel({
                 onModeChange={setMode}
                 onPermissionPreset={updatePolicy}
                 contextUsage={contextUsage}
+                filePaths={projectTree?.files}
               />
             </>
-          ) : activeFilePath && activeFile && treeRoot ? (
+          ) : activeFilePath && activeFile && fileTreeRoot ? (
             <FileView
               key={activeFilePath}
-              cwd={treeRoot}
+              cwd={fileTreeRoot}
               file={activeFile}
               fullPath={activeFilePath}
             />

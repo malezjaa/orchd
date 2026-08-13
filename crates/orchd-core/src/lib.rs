@@ -4,6 +4,7 @@ pub mod command;
 pub mod error;
 pub mod event;
 pub mod ids;
+pub mod instructions;
 pub mod models;
 pub mod permission;
 pub mod policy;
@@ -16,6 +17,7 @@ pub use command::{AgentMode, ContentPart, PolicyPatch, SessionCommand, ThinkingE
 pub use error::AdapterError;
 pub use event::{CloseReason, ErrorScope, EventPayload, SessionEvent, StopReason};
 pub use ids::{ApprovalId, BlockId, ProjectId, SessionId, ToolCallId, TurnId};
+pub use instructions::FILE_MENTION_INSTRUCTIONS;
 pub use models::{ModelInfo, ModelProvider, SUPPORTED_MODELS, find_model};
 pub use permission::{Decision, PermissionKind, PermissionRequest, PermissionScope};
 pub use policy::{PolicyEngine, PolicyModes, PolicyRule, RuleAction, Verdict};

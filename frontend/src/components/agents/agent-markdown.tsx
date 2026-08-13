@@ -19,6 +19,7 @@ export interface AgentMarkdownProps {
   // as raw syntax.
   streaming?: boolean
   className?: string
+  onFileOpen?: (path: string) => void
 }
 
 interface TextLikeNode {
@@ -31,6 +32,61 @@ interface TextLikeNode {
 
 type CodeProps = ComponentPropsWithoutRef<"code"> & { node?: TextLikeNode }
 type PreProps = ComponentPropsWithoutRef<"pre"> & { node?: TextLikeNode }
+
+interface MarkdownNode {
+  type: string
+  value?: string
+  children?: MarkdownNode[]
+}
+
+const AT_PATH_PATTERN = /(^|[\s([{<'"])(@[\w./-]+)/g
+
+function remarkFileMentions() {
+  return (tree: MarkdownNode) => {
+    const transform = (node: MarkdownNode) => {
+      if (!node.children) return
+
+      const nextChildren: MarkdownNode[] = []
+      for (const child of node.children) {
+        if (child.type !== "text" || !child.value) {
+          transform(child)
+          nextChildren.push(child)
+          continue
+        }
+
+        let cursor = 0
+        let match: RegExpExecArray | null
+        AT_PATH_PATTERN.lastIndex = 0
+        while ((match = AT_PATH_PATTERN.exec(child.value)) !== null) {
+          const raw = match[2]
+          if (!parsePathMention(raw)) continue
+
+          const start = match.index + match[1].length
+          if (start > cursor) {
+            nextChildren.push({
+              type: "text",
+              value: child.value.slice(cursor, start),
+            })
+          }
+          nextChildren.push({ type: "inlineCode", value: raw })
+          cursor = start + raw.length
+        }
+
+        if (cursor === 0) {
+          nextChildren.push(child)
+        } else if (cursor < child.value.length) {
+          nextChildren.push({
+            type: "text",
+            value: child.value.slice(cursor),
+          })
+        }
+      }
+      node.children = nextChildren
+    }
+
+    transform(tree)
+  }
+}
 
 const LANGUAGE_ALIASES: Record<string, AgentCodeLanguage> = {
   ts: "typescript",
@@ -54,15 +110,28 @@ function resolveLanguage(raw: string | undefined): AgentCodeLanguage {
 
 function getNodeText(node: TextLikeNode | undefined): string {
   if (!node) return ""
+  if (node.value !== undefined) return node.value
   if (node.type === "text") return node.value ?? ""
   return (node.children ?? []).map(getNodeText).join("")
 }
 
-function InlineCode({ node, className, children, ...props }: CodeProps) {
+function InlineCode({
+  node,
+  className,
+  children,
+  onFileOpen,
+  ...props
+}: CodeProps & { onFileOpen?: (path: string) => void }) {
   const text = getNodeText(node)
   const mention = parsePathMention(text)
   if (mention) {
-    return <FileMention path={mention.path} kind={mention.kind} />
+    return (
+      <FileMention
+        path={mention.path}
+        kind={mention.kind}
+        onOpen={onFileOpen}
+      />
+    )
   }
   const hexColor = parseHexColor(text)
   if (hexColor) {
@@ -95,24 +164,31 @@ function PreBlock({ node }: PreProps) {
   )
 }
 
-const components: Components = {
-  code: InlineCode,
-  pre: PreBlock,
+function createComponents(onFileOpen?: (path: string) => void): Components {
+  return {
+    code: (props) => <InlineCode {...props} onFileOpen={onFileOpen} />,
+    pre: PreBlock,
+  }
 }
 
 export const AgentMarkdown = memo(function AgentMarkdown({
   children,
   streaming = false,
   className,
+  onFileOpen,
 }: AgentMarkdownProps) {
   const content = useMemo(
     () => (streaming ? remend(children) : children),
     [children, streaming]
   )
+  const components = useMemo(() => createComponents(onFileOpen), [onFileOpen])
 
   return (
     <div className={cn("typeset typeset-docs max-w-none", className)}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkFileMentions]}
+        components={components}
+      >
         {content}
       </ReactMarkdown>
     </div>

@@ -17,11 +17,11 @@ import type {
 } from "@/lib/orchd"
 
 export class ApiError extends Error {
-  constructor(
-    public status: number,
-    message: string
-  ) {
+  public readonly status: number
+
+  constructor(status: number, message: string) {
     super(message)
+    this.status = status
     this.name = "ApiError"
   }
 }

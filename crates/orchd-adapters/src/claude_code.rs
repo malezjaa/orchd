@@ -2,7 +2,8 @@ mod title_generation;
 mod translator;
 
 use orchd_core::{
-  AgentAdapter, AgentCapabilities, AgentKind, Framing, LaunchSpec, SpawnSpec, Translator,
+  AgentAdapter, AgentCapabilities, AgentKind, FILE_MENTION_INSTRUCTIONS, Framing,
+  LaunchSpec, SpawnSpec, Translator,
 };
 pub use title_generation::{
   TitleGenerationError, generate_initial_title, regenerate_title,
@@ -62,6 +63,8 @@ impl AgentAdapter for ClaudeCodeAdapter {
       "stream-json".to_string(),
       "--include-partial-messages".to_string(),
       "--verbose".to_string(),
+      "--append-system-prompt".to_string(),
+      FILE_MENTION_INSTRUCTIONS.to_string(),
       // The CLI blocks on its own `can_use_tool` control requests, which the
       // session actor answers from policy or a human decision, making the
       // server the real gate rather than the CLI's own prompts.

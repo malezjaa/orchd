@@ -5,9 +5,9 @@ use std::{
 
 use orchd_core::{
   AdapterError, AgentCapabilities, AgentKind, ApprovalId, BlockId, CanonicalTool,
-  ContentPart, Decision, ErrorScope, EventPayload, Frame, PermissionRequest,
-  SessionCommand, StopReason, ThinkingEffort, ToolCallId, ToolOutput, ToolRef,
-  Translator, TurnId,
+  ContentPart, Decision, ErrorScope, EventPayload, FILE_MENTION_INSTRUCTIONS, Frame,
+  PermissionRequest, SessionCommand, StopReason, ThinkingEffort, ToolCallId, ToolOutput,
+  ToolRef, Translator, TurnId,
 };
 use serde_json::{Value, json};
 use time::OffsetDateTime;
@@ -116,12 +116,14 @@ impl CodexTranslator {
         "cwd": self.cwd,
         "approvalPolicy": "on-request",
         "sandbox": "workspace-write",
+        "developerInstructions": FILE_MENTION_INSTRUCTIONS,
       })
     } else {
       json!({
         "cwd": self.cwd,
         "approvalPolicy": "on-request",
         "sandbox": "workspace-write",
+        "developerInstructions": FILE_MENTION_INSTRUCTIONS,
       })
     };
     if let Some(fast_mode) = self.fast_mode {

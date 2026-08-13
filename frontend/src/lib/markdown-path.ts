@@ -11,9 +11,28 @@ const MAX_LENGTH = 160
 const DISALLOWED_CHARS = /[\s(){}<>=;,:!?"'`|&*+#@%^~]/
 const SEGMENT_PATTERN = /^[\w.-]+$/
 const PATH_PATTERN = /^[\w./-]+$/
+const EXTENSIONLESS_FILE_NAMES = new Set([
+  "authors",
+  "changelog",
+  "codeowners",
+  "contributors",
+  "copying",
+  "dockerfile",
+  "gemfile",
+  "license",
+  "makefile",
+  "notice",
+  "procfile",
+  "rakefile",
+  "readme",
+  "security",
+  "vagrantfile",
+])
 
 export function parsePathMention(raw: string): PathMention | null {
-  const text = raw.trim()
+  const input = raw.trim()
+  const explicitFileMarker = input.startsWith("@")
+  const text = input.startsWith("@") ? input.slice(1) : input
   if (!text || text.length > MAX_LENGTH) return null
   if (DISALLOWED_CHARS.test(text)) return null
   if (text.startsWith("-") || text.startsWith("$") || text.startsWith(".")) {
@@ -27,6 +46,7 @@ export function parsePathMention(raw: string): PathMention | null {
 
   const hasSlash = trimmed.includes("/")
   const extension = getFileExtension(trimmed)
+  const fileName = trimmed.split("/").pop()?.toLowerCase() ?? ""
 
   if (isFolder) {
     const pattern = hasSlash ? PATH_PATTERN : SEGMENT_PATTERN
@@ -40,6 +60,14 @@ export function parsePathMention(raw: string): PathMention | null {
     // abbreviations like "e.g" or "etc." aren't mistaken for files.
     if (!hasSlash && !KNOWN_FILE_EXTENSIONS.has(extension)) return null
     return PATH_PATTERN.test(trimmed) ? { kind: "file", path: trimmed } : null
+  }
+
+  if (
+    explicitFileMarker &&
+    EXTENSIONLESS_FILE_NAMES.has(fileName) &&
+    PATH_PATTERN.test(trimmed)
+  ) {
+    return { kind: "file", path: trimmed }
   }
 
   if (hasSlash) {
