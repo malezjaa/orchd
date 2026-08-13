@@ -7,7 +7,9 @@ export function promptContentFromMarkdown(
   markdown: string,
   skills: readonly AgentSkill[]
 ): ContentPart[] {
-  const byName = new Map(skills.map((skill) => [skill.name.toLowerCase(), skill]))
+  const byName = new Map(
+    skills.map((skill) => [skill.name.toLowerCase(), skill])
+  )
   const parts: ContentPart[] = []
   let cursor = 0
   let match: RegExpExecArray | null

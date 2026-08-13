@@ -25,10 +25,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import {
-  sessionDisplayName,
-  type SessionRecord,
-} from "@/lib/orchd"
+import { sessionDisplayName, type SessionRecord } from "@/lib/orchd"
 import {
   useArchiveSession,
   useDeleteSession,
@@ -116,7 +113,7 @@ export function SessionMenu({
           type="button"
           aria-label={`Options for ${sessionDisplayName(session)}`}
           className={cn(
-            "grid size-7 shrink-0 place-items-center rounded-lg text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground",
+            "grid size-7 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground",
             className
           )}
         >
@@ -218,8 +215,8 @@ export function SessionMenu({
           <DialogHeader>
             <DialogTitle>Delete session permanently?</DialogTitle>
             <DialogDescription>
-              This removes the session, its transcript, and its approval history.
-              This action cannot be undone.
+              This removes the session, its transcript, and its approval
+              history. This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -263,7 +260,9 @@ function MenuItem({
       {...props}
       className={cn(
         "flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm outline-none hover:bg-muted disabled:opacity-50",
-        destructive ? "text-destructive hover:bg-destructive/10" : "text-foreground"
+        destructive
+          ? "text-destructive hover:bg-destructive/10"
+          : "text-foreground"
       )}
     >
       <Icon className="size-3.5 text-muted-foreground" />

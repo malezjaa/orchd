@@ -8,10 +8,7 @@ import {
   MemoryStick,
   Terminal,
 } from "lucide-react"
-import {
-  Card,
-  CardContent,
-} from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import {
   Collapsible,
   CollapsibleContent,
@@ -43,7 +40,13 @@ function statusLabel(status: ProcessStatus): string {
   }
 }
 
-type ProcessActivity = "active" | "waiting" | "idle" | "stopped" | "zombie" | "unknown"
+type ProcessActivity =
+  | "active"
+  | "waiting"
+  | "idle"
+  | "stopped"
+  | "zombie"
+  | "unknown"
 
 function activityLabel(activity: ProcessActivity): string {
   switch (activity) {
@@ -163,10 +166,7 @@ function ProcessRow({
             className="mx-2 mb-2 rounded-lg border-border/60 bg-muted/20 py-0 shadow-none ring-0"
           >
             <CardContent className="grid gap-2 px-3 py-3">
-              <ProcessDetail
-                label="Activity"
-                value={activityLabel(activity)}
-              />
+              <ProcessDetail label="Activity" value={activityLabel(activity)} />
               <ProcessDetail
                 label="Path"
                 value={location}
@@ -202,7 +202,9 @@ function ProcessRow({
                 />
                 <ProcessDetail
                   label="Role"
-                  value={process.is_group_leader ? "Session leader" : "Child process"}
+                  value={
+                    process.is_group_leader ? "Session leader" : "Child process"
+                  }
                 />
               </div>
             </CardContent>
@@ -230,7 +232,7 @@ function ProcessDetail({
 }) {
   return (
     <div className="min-w-0">
-      <div className="flex items-center gap-1 text-[9px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+      <div className="flex items-center gap-1 text-[9px] font-medium tracking-[0.12em] text-muted-foreground uppercase">
         {icon}
         <span>{label}</span>
       </div>
@@ -240,7 +242,7 @@ function ProcessDetail({
           mono && "font-mono",
           code && "rounded-md border border-border/60 bg-muted/55 px-2 py-1.5",
           wrap
-            ? "whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
+            ? "[overflow-wrap:anywhere] break-words whitespace-pre-wrap"
             : "truncate"
         )}
         title={value}
@@ -259,7 +261,9 @@ function ProcessSkeleton() {
           <div className="flex gap-2.5">
             <div className="size-6 shrink-0 animate-pulse rounded-md bg-muted" />
             <div className="min-w-0 flex-1 space-y-2">
-              <div className={cn("h-3 animate-pulse rounded bg-muted", width)} />
+              <div
+                className={cn("h-3 animate-pulse rounded bg-muted", width)}
+              />
               <div className="h-2.5 w-1/2 animate-pulse rounded bg-muted" />
               <div className="h-2.5 w-4/5 animate-pulse rounded bg-muted" />
             </div>
@@ -271,8 +275,7 @@ function ProcessSkeleton() {
 }
 
 export function ProcessesPanel({ sessionId }: { sessionId: string | null }) {
-  const { data: inventory, isLoading, isError } =
-    useSessionProcesses(sessionId)
+  const { data: inventory, isLoading, isError } = useSessionProcesses(sessionId)
   const processList = inventory?.processes ?? []
   const sessionBusy = inventory?.session_busy ?? false
   const previousCpuTicks = useRef(new Map<number, number>())
@@ -314,7 +317,7 @@ export function ProcessesPanel({ sessionId }: { sessionId: string | null }) {
         >
           <CardContent className="grid grid-cols-2 divide-x divide-border/70 p-0">
             <div className="px-3 py-2">
-              <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+              <p className="text-[10px] tracking-[0.12em] text-muted-foreground uppercase">
                 Processes
               </p>
               <p className="mt-1 font-mono text-lg leading-none text-foreground">
@@ -322,7 +325,7 @@ export function ProcessesPanel({ sessionId }: { sessionId: string | null }) {
               </p>
             </div>
             <div className="px-3 py-2">
-              <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+              <p className="text-[10px] tracking-[0.12em] text-muted-foreground uppercase">
                 RSS memory
               </p>
               <p className="mt-1 font-mono text-lg leading-none text-foreground">

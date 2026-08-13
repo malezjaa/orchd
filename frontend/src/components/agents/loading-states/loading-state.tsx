@@ -26,7 +26,7 @@ function useElapsed(startedAt?: string) {
   const parsedStart = startedAt ? Date.parse(startedAt) : mountedAt
   const start = Number.isFinite(parsedStart) ? parsedStart : mountedAt
   const [elapsedDeciseconds, setElapsedDeciseconds] = useState(() =>
-    Math.max(0, Math.floor((Date.now() - start) / 100)),
+    Math.max(0, Math.floor((Date.now() - start) / 100))
   )
 
   useEffect(() => {
@@ -69,7 +69,7 @@ export function LoadingState({
       className={cn(
         "orchd-loading-state inline-flex w-fit items-center whitespace-nowrap",
         compact ? "gap-0" : "gap-2.5",
-        className,
+        className
       )}
     >
       <span
@@ -82,7 +82,7 @@ export function LoadingState({
             key={index}
             className={cn(
               "orchd-loading-state__cell size-[4px] bg-current",
-              pattern.round ? "rounded-full" : "rounded-[1px]",
+              pattern.round ? "rounded-full" : "rounded-[1px]"
             )}
             style={{
               opacity: delay === null ? 0.07 : 0.15,
@@ -108,7 +108,7 @@ export function LoadingState({
           >
             {label}
           </span>
-          <span className="font-mono text-[12px] tabular-nums text-muted-foreground">
+          <span className="font-mono text-[12px] text-muted-foreground tabular-nums">
             {elapsed}
           </span>
         </>

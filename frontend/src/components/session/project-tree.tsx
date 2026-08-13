@@ -1,8 +1,4 @@
-import {
-  FileTree,
-  useFileTree,
-  useFileTreeSearch,
-} from "@pierre/trees/react"
+import { FileTree, useFileTree, useFileTreeSearch } from "@pierre/trees/react"
 import type { FileTreeDirectoryHandle } from "@pierre/trees"
 import { Loader2, TriangleAlert } from "lucide-react"
 import { useEffect } from "react"
@@ -21,11 +17,7 @@ function FileTreeView({
   gitStatus?: readonly GitStatusEntry[]
   expandedPaths: readonly string[]
 }) {
-  const {
-    currentTab,
-    switchActiveTab,
-    setExpandedTreePaths,
-  } = useWorkspace()
+  const { currentTab, switchActiveTab, setExpandedTreePaths } = useWorkspace()
   const { model } = useFileTree({
     paths,
     gitStatus,
@@ -65,9 +57,7 @@ function FileTreeView({
 
         const segments = currentTab.file.split("/").filter(Boolean)
         for (let index = 1; index < segments.length; index += 1) {
-          const parent = model.getItem(
-            `${segments.slice(0, index).join("/")}/`
-          )
+          const parent = model.getItem(`${segments.slice(0, index).join("/")}/`)
           if (parent?.isDirectory()) {
             const directory = parent as FileTreeDirectoryHandle
             directory.expand()
