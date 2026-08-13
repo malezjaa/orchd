@@ -311,16 +311,69 @@ function updateSessionCaches(
   }
 }
 
+function sortSessions(sessions: SessionRecord[]) {
+  return [...sessions].sort((a, b) => {
+    const aPinned = a.pinned_at !== null
+    const bPinned = b.pinned_at !== null
+
+    if (aPinned !== bPinned) return aPinned ? -1 : 1
+
+    if (aPinned && bPinned) {
+      return b.pinned_at!.localeCompare(a.pinned_at!)
+    }
+
+    return b.created_at.localeCompare(a.created_at)
+  })
+}
+
 export function usePinSession() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: ({ id, pinned }: { id: string; pinned: boolean }) =>
       pinned ? api.pinSession(id) : api.unpinSession(id),
-    onSuccess: (_data, { id, pinned }) => {
-      updateSessionCaches(queryClient, id, (session) => ({
-        ...session,
-        pinned_at: pinned ? new Date().toISOString() : null,
-      }))
+    onMutate: async ({ id, pinned }) => {
+      await Promise.all(
+        [queryKeys.sessions, queryKeys.archivedSessions].map((queryKey) =>
+          queryClient.cancelQueries({ queryKey })
+        )
+      )
+
+      const previousSessions = queryClient.getQueryData<SessionRecord[]>(
+        queryKeys.sessions
+      )
+      const previousArchivedSessions = queryClient.getQueryData<SessionRecord[]>(
+        queryKeys.archivedSessions
+      )
+      const pinnedAt = pinned ? new Date().toISOString() : null
+
+      for (const queryKey of [
+        queryKeys.sessions,
+        queryKeys.archivedSessions,
+      ]) {
+        queryClient.setQueryData<SessionRecord[]>(queryKey, (current) => {
+          if (!current) return current
+
+          return sortSessions(
+            current.map((session) =>
+              session.id === id ? { ...session, pinned_at: pinnedAt } : session
+            )
+          )
+        })
+      }
+
+      return { previousArchivedSessions, previousSessions }
+    },
+    onError: (_error, _variables, context) => {
+      if (!context) return
+
+      queryClient.setQueryData(
+        queryKeys.sessions,
+        context.previousSessions
+      )
+      queryClient.setQueryData(
+        queryKeys.archivedSessions,
+        context.previousArchivedSessions
+      )
     },
   })
 }

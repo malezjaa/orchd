@@ -40,6 +40,8 @@ export interface SessionMenuProps {
   session: SessionRecord
   archived: boolean
   className?: string
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
   onDeleted?: (id: string) => void
   onRegenerateTitle?: () => void
   regenerating?: boolean
@@ -51,11 +53,13 @@ export function SessionMenu({
   session,
   archived,
   className,
+  open: controlledOpen,
+  onOpenChange,
   onDeleted,
   onRegenerateTitle,
   regenerating = false,
 }: SessionMenuProps) {
-  const [open, setOpen] = useState(false)
+  const [internalOpen, setInternalOpen] = useState(false)
   const [renameOpen, setRenameOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [title, setTitle] = useState(sessionDisplayName(session))
@@ -77,6 +81,12 @@ export function SessionMenu({
     regenerateTitle.isPending ||
     regenerating
   const canRegenerate = TITLE_GENERATION_AGENTS.has(session.agent_kind)
+  const open = controlledOpen ?? internalOpen
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (controlledOpen === undefined) setInternalOpen(nextOpen)
+    onOpenChange?.(nextOpen)
+  }
 
   const showError = (message: string, error: unknown) => {
     toast.error(message, {
@@ -108,7 +118,7 @@ export function SessionMenu({
 
   return (
     <>
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover open={open} onOpenChange={handleOpenChange}>
         <PopoverTrigger
           type="button"
           aria-label={`Options for ${sessionDisplayName(session)}`}
@@ -125,7 +135,7 @@ export function SessionMenu({
             label={session.pinned_at ? "Unpin session" : "Pin session"}
             disabled={pending}
             onClick={() => {
-              setOpen(false)
+              handleOpenChange(false)
               pinSession.mutate({
                 id: session.id,
                 pinned: session.pinned_at === null,
@@ -137,7 +147,7 @@ export function SessionMenu({
             label="Rename session"
             disabled={pending}
             onClick={() => {
-              setOpen(false)
+              handleOpenChange(false)
               setTitle(sessionDisplayName(session))
               setRenameOpen(true)
             }}
@@ -148,7 +158,7 @@ export function SessionMenu({
               label="Regenerate title"
               disabled={pending}
               onClick={() => {
-                setOpen(false)
+                handleOpenChange(false)
                 if (onRegenerateTitle) onRegenerateTitle()
                 else regenerateTitle.mutate(session.id)
               }}
@@ -160,7 +170,7 @@ export function SessionMenu({
             label={archived ? "Unarchive" : "Archive"}
             disabled={pending}
             onClick={() => {
-              setOpen(false)
+              handleOpenChange(false)
               if (archived) unarchiveSession.mutate(session.id)
               else archiveSession.mutate(session.id)
             }}
@@ -171,7 +181,7 @@ export function SessionMenu({
             destructive
             disabled={pending}
             onClick={() => {
-              setOpen(false)
+              handleOpenChange(false)
               setDeleteOpen(true)
             }}
           />

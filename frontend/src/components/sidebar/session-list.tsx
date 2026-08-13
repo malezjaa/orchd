@@ -4,6 +4,7 @@ import {
   Folder,
   FolderOpen,
   FolderPlus,
+  Pin,
   Search as SearchIcon,
   SquarePen,
 } from "lucide-react"
@@ -94,6 +95,9 @@ export function SessionList({
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(
     () => new Set()
   )
+  const [contextMenuSessionId, setContextMenuSessionId] = useState<
+    string | null
+  >(null)
 
   const toggleProject = (id: string) => {
     setCollapsedProjects((current) => {
@@ -102,6 +106,20 @@ export function SessionList({
       else next.add(id)
       return next
     })
+  }
+
+  const handleSessionContextMenu = (
+    event: React.MouseEvent,
+    sessionId: string
+  ) => {
+    event.preventDefault()
+    setContextMenuSessionId(sessionId)
+  }
+
+  const closeContextMenu = (sessionId: string) => {
+    setContextMenuSessionId((current) =>
+      current === sessionId ? null : current
+    )
   }
 
   const filtered = sessions.filter((session) =>
@@ -120,7 +138,7 @@ export function SessionList({
     const groups: ProjectGroup[] = projects
       .map((project) => ({
         project,
-        sessions: byProject.get(project.id) ?? [],
+        sessions: sortProjectSessions(byProject.get(project.id) ?? []),
       }))
       .filter((group) => group.sessions.length > 0)
 
@@ -227,15 +245,27 @@ export function SessionList({
                     {projectSessions.map((session) => {
                       const Icon = agentIcon(session.agent_kind)
                       const working = session.busy || session.titleRegenerating
+                      const contextMenuOpen =
+                        contextMenuSessionId === null
+                          ? undefined
+                          : contextMenuSessionId === session.id
                       return (
                         <AnimatedSidebarMenuSubItem
                           key={session.id}
                           className="group/session"
+                          onContextMenu={(event) =>
+                            handleSessionContextMenu(event, session.id)
+                          }
                         >
                           <AnimatedSidebarMenuSubButton
                             icon={<Icon className="size-3.5" />}
                             isActive={session.id === activeId}
-                            onSelect={() => onSelect(session.id)}
+                            onSelect={() => {
+                              setContextMenuSessionId(null)
+                              onSelect(session.id)
+                            }}
+                            badge={<SessionPinIndicator session={session} />}
+                            className="pr-9"
                             meta={
                               working ? (
                                 <SessionWorkingStatus session={session} />
@@ -248,6 +278,10 @@ export function SessionList({
                             <SessionMenu
                               session={session}
                               archived={historyOnly}
+                              open={contextMenuOpen}
+                              onOpenChange={(open) => {
+                                if (!open) closeContextMenu(session.id)
+                              }}
                               onDeleted={onDeleted}
                             />
                           </div>
@@ -262,15 +296,27 @@ export function SessionList({
             {ungrouped.map((session) => {
               const Icon = agentIcon(session.agent_kind)
               const working = session.busy || session.titleRegenerating
+              const contextMenuOpen =
+                contextMenuSessionId === null
+                  ? undefined
+                  : contextMenuSessionId === session.id
               return (
                 <AnimatedSidebarMenuItem
                   key={session.id}
                   className="group/session"
+                  onContextMenu={(event) =>
+                    handleSessionContextMenu(event, session.id)
+                  }
                 >
                   <AnimatedSidebarMenuButton
                     icon={<Icon className="size-4" />}
                     isActive={session.id === activeId}
-                    onSelect={() => onSelect(session.id)}
+                    onSelect={() => {
+                      setContextMenuSessionId(null)
+                      onSelect(session.id)
+                    }}
+                    badge={<SessionPinIndicator session={session} />}
+                    className="pr-9"
                     meta={
                       working ? (
                         <SessionWorkingStatus session={session} />
@@ -283,6 +329,10 @@ export function SessionList({
                     <SessionMenu
                       session={session}
                       archived={historyOnly}
+                      open={contextMenuOpen}
+                      onOpenChange={(open) => {
+                        if (!open) closeContextMenu(session.id)
+                      }}
                       onDeleted={onDeleted}
                     />
                   </div>
@@ -303,5 +353,27 @@ export function SessionList({
         </div>
       </AnimatedSidebarGroupContent>
     </AnimatedSidebarGroup>
+  )
+}
+
+function sortProjectSessions(sessions: SessionRecord[]) {
+  return [...sessions].sort((a, b) => {
+    const aPinned = a.pinned_at !== null
+    const bPinned = b.pinned_at !== null
+
+    if (aPinned !== bPinned) return aPinned ? -1 : 1
+    if (aPinned && bPinned) return b.pinned_at!.localeCompare(a.pinned_at!)
+
+    return b.created_at.localeCompare(a.created_at)
+  })
+}
+
+function SessionPinIndicator({ session }: { session: SessionRecord }) {
+  if (!session.pinned_at) return null
+
+  return (
+    <span title="Pinned session" aria-label="Pinned session">
+      <Pin className="size-3.5 text-foreground/70" />
+    </span>
   )
 }
