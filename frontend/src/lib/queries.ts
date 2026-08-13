@@ -5,6 +5,7 @@ import { DEFAULT_CODE_THEME } from "@/lib/code-themes"
 import type {
   AgentKind,
   FileContentsResponse,
+  GitAction,
   ProjectRecord,
   ProcessInventory,
   SessionRecord,
@@ -197,6 +198,29 @@ export function useGitStatus(path: string | undefined, enabled: boolean) {
   })
 }
 
+export function useGitInfo(path: string | undefined, enabled: boolean) {
+  const token = useAuthToken()
+  return useQuery({
+    queryKey: ["git-info", path ?? "__none__"],
+    queryFn: () => api.gitInfo(path as string),
+    enabled: enabled && token !== null && Boolean(path),
+    staleTime: 10_000,
+  })
+}
+
+export function useGitAction() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ path, action }: { path: string; action: GitAction }) =>
+      api.gitAction(path, action),
+    onSuccess: (_result, { path }) => {
+      void queryClient.invalidateQueries({ queryKey: ["git-status", path] })
+      void queryClient.invalidateQueries({ queryKey: ["git-info", path] })
+      void queryClient.invalidateQueries({ queryKey: ["fs-tree", path] })
+    },
+  })
+}
+
 export function useFileContents(cwd: string | null, file: string | null) {
   const token = useAuthToken()
   return useQuery({
@@ -337,7 +361,9 @@ export function useRegenerateSessionTitle() {
     mutationFn: (id: string) => api.regenerateSessionTitle(id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
-      void queryClient.invalidateQueries({ queryKey: queryKeys.archivedSessions })
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.archivedSessions,
+      })
     },
   })
 }

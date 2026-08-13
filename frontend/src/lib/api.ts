@@ -11,6 +11,8 @@ import type {
   FileTreeResponse,
   FsBrowseResponse,
   GitStatusResponse,
+  GitAction,
+  GitInfoResponse,
   ModelInfo,
   ProjectRecord,
   ProcessInventory,
@@ -43,7 +45,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (!res.ok) {
     const body = await res.text().catch(() => "")
-    throw new ApiError(res.status, body || res.statusText)
+    let message = body
+    try {
+      const parsed = JSON.parse(body) as { error?: unknown }
+      if (typeof parsed.error === "string") message = parsed.error
+    } catch {
+      // Keep the raw response when the server did not return JSON.
+    }
+    throw new ApiError(res.status, message || res.statusText)
   }
   if (res.status === 204) return undefined as T
   return (await res.json()) as T
@@ -152,11 +161,20 @@ export const api = {
       `/fs/git-status?path=${encodeURIComponent(path)}`
     ),
 
+  gitInfo: (path: string) =>
+    request<GitInfoResponse>(`/git/info?path=${encodeURIComponent(path)}`),
+
+  gitAction: (path: string, action: GitAction) =>
+    request<{ message: string }>("/git/action", {
+      method: "POST",
+      body: JSON.stringify({ path, ...action }),
+    }),
+
   listModels: () => request<ModelInfo[]>("/models"),
 
   listSkills: (path: string, agentKind: AgentKind) =>
     request<AgentSkill[]>(
-      `/skills?path=${encodeURIComponent(path)}&agent_kind=${encodeURIComponent(agentKind)}`,
+      `/skills?path=${encodeURIComponent(path)}&agent_kind=${encodeURIComponent(agentKind)}`
     ),
 
   getSettings: () => request<SettingsRecord>("/settings"),

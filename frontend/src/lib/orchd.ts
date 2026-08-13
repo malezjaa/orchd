@@ -57,7 +57,12 @@ export interface SessionRecord {
   turnStartedAt?: string | null
 }
 
-export type ProcessStatus = "running" | "sleeping" | "stopped" | "zombie" | "unknown"
+export type ProcessStatus =
+  | "running"
+  | "sleeping"
+  | "stopped"
+  | "zombie"
+  | "unknown"
 
 export interface ProcessRecord {
   pid: number
@@ -162,6 +167,36 @@ export interface GitStatusResponse {
   path: string
   git: GitStatusEntry[] | null
 }
+
+export interface GitBranch {
+  name: string
+  current: boolean
+}
+
+export interface GitCommit {
+  hash: string
+  short_hash: string
+  subject: string
+  author: string
+  authored_at: string
+}
+
+export interface GitInfoResponse {
+  path: string
+  branch: string | null
+  branches: GitBranch[]
+  commits: GitCommit[]
+}
+
+export type GitAction =
+  | { action: "commit"; message: string }
+  | { action: "restore" }
+  | { action: "revert_commit"; commit: string }
+  | { action: "create_branch"; name: string }
+  | { action: "delete_branch"; name: string }
+  | { action: "switch_branch"; name: string }
+  | { action: "push" }
+  | { action: "pull" }
 
 export type ModelProvider = "anthropic" | "open_ai"
 
