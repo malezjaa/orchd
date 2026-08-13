@@ -1,4 +1,10 @@
-import { useCallback, useMemo, useState, type ReactNode } from "react"
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react"
 import type { ProjectRecord, SessionRecord } from "@/lib/orchd"
 import { useArchivedSessions, useProjects, useSessions } from "@/lib/queries"
 import {
@@ -10,6 +16,33 @@ import {
 
 const EMPTY_VIEW_KEY = "__empty__"
 const DRAFT_VIEW_KEY = "__draft__"
+const SESSION_URL_PARAM = "session"
+
+function sessionIdFromUrl() {
+  if (typeof window === "undefined") return null
+  return new URL(window.location.href).searchParams.get(SESSION_URL_PARAM)
+}
+
+function updateSessionUrl(
+  sessionId: string | null,
+  mode: "push" | "replace" = "push"
+) {
+  if (typeof window === "undefined") return
+
+  const url = new URL(window.location.href)
+  if (sessionId) url.searchParams.set(SESSION_URL_PARAM, sessionId)
+  else url.searchParams.delete(SESSION_URL_PARAM)
+
+  const nextUrl = `${url.pathname}${url.search}${url.hash}`
+  const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`
+  if (nextUrl === currentUrl) return
+
+  window.history[`${mode}State`](
+    { ...window.history.state, sessionId },
+    "",
+    nextUrl
+  )
+}
 
 interface SessionViewState {
   openedFiles: string[]
@@ -29,7 +62,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const { data: sessions = [], isLoading: sessionsLoading } = useSessions()
   const { data: projects = [] } = useProjects()
   const { data: archivedSessions = [] } = useArchivedSessions(true)
-  const [activeId, setActiveId] = useState<string | null>(null)
+  const [activeId, setActiveId] = useState<string | null>(sessionIdFromUrl)
   const [draft, setDraft] = useState<DraftSession | null>(null)
   const [sessionViews, setSessionViews] = useState<
     Record<string, SessionViewState>
@@ -50,17 +83,30 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const { currentTab, openedFiles, expandedTreePaths } =
     sessionViews[viewKey] ?? createSessionView()
 
+  useEffect(() => {
+    const handlePopState = () => {
+      setDraft(null)
+      setActiveId(sessionIdFromUrl())
+    }
+
+    window.addEventListener("popstate", handlePopState)
+    return () => window.removeEventListener("popstate", handlePopState)
+  }, [])
+
   const selectSession = useCallback((id: string) => {
     setDraft(null)
     setActiveId(id)
+    updateSessionUrl(id)
   }, [])
   const startDraft = useCallback((project: ProjectRecord) => {
     setActiveId(null)
     setDraft({ project })
+    updateSessionUrl(null)
   }, [])
   const sessionCreated = useCallback((session: SessionRecord) => {
     setDraft(null)
     setActiveId(session.id)
+    updateSessionUrl(session.id, "replace")
   }, [])
   const sessionDeleted = useCallback(
     (id: string) => {
@@ -73,6 +119,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       if (activeId !== id) return
       setActiveId(null)
       setDraft(null)
+      updateSessionUrl(null, "replace")
     },
     [activeId]
   )
