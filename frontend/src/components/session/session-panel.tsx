@@ -10,6 +10,7 @@ import {
 import { toast } from "sonner"
 import type { PromptContextUsage } from "@/components/agents/prompt-input"
 import { AnimatedSidebarTrigger } from "@/components/motion/animated-sidebar"
+import { GitHubAccount } from "@/components/github-account"
 import { MessageGroup, MessageScroller } from "@/components/agents/message"
 import { SessionComposer } from "@/components/session/session-composer"
 import { SessionHeader } from "@/components/session/session-header"
@@ -109,6 +110,7 @@ function DraftHeader({
           {draft.project.path}
         </p>
       </div>
+      <GitHubAccount />
     </header>
   )
 }
@@ -405,6 +407,8 @@ export function SessionPanel() {
           <AnimatedSidebarTrigger className="text-muted-foreground hover:bg-muted hover:text-foreground">
             <PanelLeft className="size-4" />
           </AnimatedSidebarTrigger>
+          <div className="flex-1" />
+          <GitHubAccount />
         </header>
         <EmptyState
           title="No session selected"

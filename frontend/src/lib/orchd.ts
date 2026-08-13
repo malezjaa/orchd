@@ -257,6 +257,16 @@ export interface ClientSessionRecord {
   revoked_at: string | null
 }
 
+export type GitHubAccountStatus = "authenticated" | "logged_out" | "unavailable"
+
+export interface GitHubAccount {
+  status: GitHubAccountStatus
+  login: string | null
+  name: string | null
+  avatar_url: string | null
+  message: string | null
+}
+
 export const AGENT_LABEL: Record<AgentKind, string> = {
   claude_code: "Claude Code",
   codex: "Codex",

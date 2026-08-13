@@ -1,5 +1,6 @@
 import { PanelLeft } from "lucide-react"
 import { LoadingState } from "@/components/agents/loading-states/loading-state"
+import { GitHubAccount } from "@/components/github-account"
 import { AnimatedSidebarTrigger } from "@/components/motion/animated-sidebar"
 import { Loader } from "@/components/motion/loader"
 import { SessionMenu } from "@/components/session/session-menu"
@@ -46,33 +47,36 @@ export function SessionHeader({
         />
       ) : null}
       <div className="group/title flex min-w-0 flex-1 items-center gap-1.5">
-        <div className="min-w-0 flex-1">
-          {titleRegenerating ? (
-            <div className="flex h-5 items-center">
-              <Loader
-                variant="dots"
-                size={10}
-                label="Regenerating title"
-                className="text-muted-foreground"
-              />
-            </div>
-          ) : (
-            <p className="truncate text-sm font-medium text-foreground">
-              {justGeneratedTitle ? (
-                <TypewriterText
-                  key={justGeneratedTitle}
-                  text={justGeneratedTitle}
-                  onComplete={onTitleAnimationComplete}
+        <div className="min-w-0 flex">
+          <div className="flex min-w-0 flex-col gap-0.5">
+            {titleRegenerating ? (
+              <div className="flex h-5 items-center">
+                <Loader
+                  variant="dots"
+                  size={10}
+                  label="Regenerating title"
+                  className="text-muted-foreground"
                 />
-              ) : (
-                sessionDisplayName(session)
-              )}
+              </div>
+            ) : (
+              <p className="truncate text-sm font-medium text-foreground">
+                {justGeneratedTitle ? (
+                  <TypewriterText
+                    key={justGeneratedTitle}
+                    text={justGeneratedTitle}
+                    onComplete={onTitleAnimationComplete}
+                  />
+                ) : (
+                  sessionDisplayName(session)
+                )}
+              </p>
+            )}
+            <p className="truncate text-[11px] text-muted-foreground">
+              {session.cwd}
             </p>
-          )}
-          <p className="truncate text-[11px] text-muted-foreground">
-            {session.cwd}
-          </p>
+          </div>
         </div>
+
         <SessionMenu
           session={session}
           archived={session.archived_at !== null}
@@ -85,6 +89,7 @@ export function SessionHeader({
           regenerating={titleRegenerating}
         />
       </div>
+      <GitHubAccount />
     </header>
   )
 }

@@ -168,6 +168,7 @@ export default defineConfig({
       "/sessions": { target: ORCHD_TARGET, ws: true },
       "/fs": ORCHD_TARGET,
       "/git": ORCHD_TARGET,
+      "/github": ORCHD_TARGET,
       "/models": ORCHD_TARGET,
       "/settings": ORCHD_TARGET,
       "/skills": ORCHD_TARGET,

@@ -2,6 +2,7 @@ mod auth;
 mod error;
 mod file_tree;
 mod git;
+mod github;
 mod http;
 mod processes;
 mod state;

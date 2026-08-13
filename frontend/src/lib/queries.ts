@@ -19,6 +19,7 @@ export const queryKeys = {
   archivedSessions: ["sessions", "archived"] as const,
   models: ["models"] as const,
   settings: ["settings"] as const,
+  githubAccount: ["github-account"] as const,
 }
 
 export function useSettings() {
@@ -28,6 +29,17 @@ export function useSettings() {
     queryFn: api.getSettings,
     enabled: token !== null,
     staleTime: Infinity,
+  })
+}
+
+export function useGitHubAccount() {
+  const token = useAuthToken()
+  return useQuery({
+    queryKey: queryKeys.githubAccount,
+    queryFn: api.githubAccount,
+    enabled: token !== null,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
   })
 }
 

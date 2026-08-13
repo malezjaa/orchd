@@ -44,6 +44,7 @@ pub fn router() -> Router<AppState> {
     .route("/fs/git-status", get(git_status_response))
     .route("/git/info", get(git_info))
     .route("/git/action", post(git_action))
+    .route("/github/account", get(crate::github::account))
     .route("/fs/tree", get(file_tree))
     .route("/fs/contents", get(file_contents).put(write_file_contents))
     .route("/models", get(list_models))

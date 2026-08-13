@@ -10,6 +10,7 @@ import type {
   FileContentsResponse,
   FileTreeResponse,
   FsBrowseResponse,
+  GitHubAccount,
   GitStatusResponse,
   GitAction,
   GitInfoResponse,
@@ -169,6 +170,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ path, ...action }),
     }),
+
+  githubAccount: () => request<GitHubAccount>("/github/account"),
 
   listModels: () => request<ModelInfo[]>("/models"),
 
