@@ -4,6 +4,7 @@ mod echo;
 mod error;
 mod handle;
 mod lifecycle;
+mod recovery;
 mod registry;
 
 pub use config::{ActorConfig, BackoffPolicy, IdleAction, IdlePolicy};

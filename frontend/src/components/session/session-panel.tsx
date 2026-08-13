@@ -7,7 +7,6 @@ import {
   useRef,
   useState,
 } from "react"
-import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import type { PromptContextUsage } from "@/components/agents/prompt-input"
 import { AnimatedSidebarTrigger } from "@/components/motion/animated-sidebar"
@@ -31,15 +30,10 @@ import {
   type SessionRecord,
   type ThinkingEffort,
 } from "@/lib/orchd"
-import {
-  queryKeys,
-  useCreateSession,
-  useModels,
-  useProjectTree,
-} from "@/lib/queries"
+import { useCreateSession, useModels, useProjectTree } from "@/lib/queries"
 import { finalAssistantTextIds, isHiddenToolCall } from "@/lib/timeline"
 import { groupTimelineByTurn, turnDurationSeconds } from "@/lib/timeline-groups"
-import { useSessionSocket } from "@/lib/use-session-socket"
+import { useSessionState } from "@/lib/use-session-socket"
 import type { CurrentTab } from "@/components/app-shell.tsx"
 
 // Stable identity so the loading fallback doesn't defeat memoization.
@@ -137,7 +131,6 @@ export function SessionPanel({
   setOpenedFiles,
   treeRoot,
 }: SessionPanelProps) {
-  const queryClient = useQueryClient()
   const createSession = useCreateSession()
   // Draft sessions do not have a live session cwd yet, but their selected
   // project is already the correct root for file references.
@@ -166,10 +159,6 @@ export function SessionPanel({
   }
 
   const isLive = session !== null && LIVE_STATUSES.has(session.status)
-
-  const onSessionClosed = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
-  }, [queryClient])
 
   const [titleAnim, setTitleAnim] = useState<{
     regenerating: boolean
@@ -208,16 +197,13 @@ export function SessionPanel({
       // sessions cache already holds the final title, so applying the
       // replayed ones would flash the title through its whole history.
       if (!isLive) return
-      queryClient.setQueryData<SessionRecord[]>(queryKeys.sessions, (current) =>
-        current?.map((s) => (s.id === sessionId ? { ...s, title } : s))
-      )
       setTitleAnim((prev) => {
         if (!prev.regenerating) return prev
         clearRegenerationTimeout()
         return { regenerating: false, justGenerated: title }
       })
     },
-    [queryClient, sessionId, clearRegenerationTimeout]
+    [clearRegenerationTimeout]
   )
 
   const {
@@ -231,7 +217,10 @@ export function SessionPanel({
     updatePolicy,
     closeSession,
     regenerateTitle,
-  } = useSessionSocket(sessionId, onSessionClosed, onTitleUpdated)
+  } = useSessionState(sessionId, {
+    onTitleUpdated,
+    titleRegenerating: titleAnim.regenerating,
+  })
 
   const modelsQuery = useModels()
   const models = modelsQuery.data ?? EMPTY_MODELS
@@ -323,39 +312,6 @@ export function SessionPanel({
     setModel,
     updatePolicy,
   ])
-
-  // Sidebar rows otherwise learn a session is busy only from the 20s
-  // background poll, too slow to catch a normal-length turn.
-  useEffect(() => {
-    if (!sessionId) return
-    queryClient.setQueryData<SessionRecord[]>(queryKeys.sessions, (current) =>
-      current?.map((s) =>
-        s.id === sessionId
-          ? { ...s, busy: state.busy, turnStartedAt: state.turnStartedAt }
-          : s
-      )
-    )
-  }, [queryClient, sessionId, state.busy, state.turnStartedAt])
-
-  // Regeneration runs as its own subprocess and never shows up in the
-  // backend's `busy` flag, so the sidebar row needs its own mirror.
-  // Cleared on unmount so an abandoned regeneration leaves no stale row.
-  useEffect(() => {
-    if (!sessionId) return
-    const regenerating = titleAnim.regenerating
-    queryClient.setQueryData<SessionRecord[]>(queryKeys.sessions, (current) =>
-      current?.map((s) =>
-        s.id === sessionId ? { ...s, titleRegenerating: regenerating } : s
-      )
-    )
-    return () => {
-      queryClient.setQueryData<SessionRecord[]>(queryKeys.sessions, (current) =>
-        current?.map((s) =>
-          s.id === sessionId ? { ...s, titleRegenerating: false } : s
-        )
-      )
-    }
-  }, [queryClient, sessionId, titleAnim.regenerating])
 
   const handleApprove = useCallback(
     (eventId: string) => respondApproval(eventId, { type: "allow" }),

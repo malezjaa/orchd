@@ -26,6 +26,7 @@ use crate::{
   config::{ActorConfig, IdleAction},
   echo::{chunk_words, extract_text},
   lifecycle::{SessionLifecycle, SessionTranscript},
+  recovery::RecoveryState,
 };
 
 const COMPACTION_THRESHOLD: u64 = 300;
@@ -79,9 +80,7 @@ pub struct SessionActor {
   /// Bumped on every background generation call so a slow, superseded
   /// generation can't clobber a result that arrived first.
   title_generation_epoch: u64,
-  /// Consecutive failed spawn/run attempts since the agent last came up
-  /// cleanly. Bounds crash-recovery retries.
-  retry_count: u32,
+  recovery: RecoveryState,
   stopped: Arc<tokio::sync::Notify>,
   last_activity: Instant,
   /// The highest seq already folded by `maybe_compact`.
@@ -124,7 +123,7 @@ impl SessionActor {
       native_session_id,
       current_title: initial_title,
       title_generation_epoch: 0,
-      retry_count: 0,
+      recovery: RecoveryState::default(),
       stopped,
       last_activity: Instant::now(),
       compacted_up_to: 0,
@@ -292,31 +291,20 @@ impl SessionActor {
       match self.run_agent_attempt(adapter.as_ref(), resume_native_session_id).await {
         AttemptOutcome::Stopped => break,
         AttemptOutcome::Crashed => {
-          if !self.should_retry(adapter.as_ref()) {
+          let Some(plan) = self.recovery.next_retry(
+            self.config.backoff,
+            self.native_session_id.is_some(),
+            adapter.capabilities().resume,
+          ) else {
             self.fail(CloseReason::AgentCrash).await;
             break;
-          }
-          let delay = self.config.backoff.delay_for(self.retry_count);
-          self.retry_count += 1;
-          tracing::warn!(session = %self.id, attempt = self.retry_count, ?delay, "retrying crashed agent after backoff");
-          if !self.wait_for_backoff_or_close(delay).await {
+          };
+          tracing::warn!(session = %self.id, attempt = plan.attempt, delay = ?plan.delay, "retrying crashed agent after backoff");
+          if !self.wait_for_backoff_or_close(plan.delay).await {
             break;
           }
         }
       }
-    }
-  }
-
-  /// Once the CLI has told us its own session id, only adapters that can
-  /// `--resume` it are safe to retry: respawning a stateful CLI without
-  /// resume would silently start a fresh conversation under our session id.
-  fn should_retry(&self, adapter: &dyn AgentAdapter) -> bool {
-    if self.retry_count >= self.config.backoff.max_retries {
-      return false;
-    }
-    match &self.native_session_id {
-      Some(_) => adapter.capabilities().resume,
-      None => true,
     }
   }
 
@@ -672,7 +660,7 @@ impl SessionActor {
       // A clean init means the agent came up, so any crash-recovery streak
       // that led here is over.
       EventPayload::SessionInit { .. } => {
-        self.retry_count = 0;
+        self.recovery.reset();
         let turn = self.lifecycle.current_turn();
         self.emit(payload, turn).await;
       }

@@ -1,11 +1,12 @@
-// Drives one session's live WS connection: fetches a short-lived ticket,
-// resumes from the last seen `seq`, and folds the event stream into a
-// timeline. Reconnects on drop, resuming from where it left off so the
-// durable log fills any gap.
+// Owns one session's live state: WebSocket replay, event folding, commands,
+// and projections into the session list cache. Views consume this module's
+// state instead of coordinating those concerns themselves.
 
 import { useCallback, useEffect, useReducer, useRef, useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { api } from "@/lib/api"
+import { queryKeys } from "@/lib/queries"
 import type {
   AgentMode,
   ContentPart,
@@ -13,6 +14,7 @@ import type {
   PolicyRule,
   SessionCommand,
   SessionEvent,
+  SessionRecord,
   ThinkingEffort,
 } from "@/lib/orchd"
 import {
@@ -39,6 +41,13 @@ type ServerMessage =
 
 export type SocketStatus = "idle" | "connecting" | "open" | "closed"
 
+export interface SessionStateOptions {
+  // Replay events are delivered with `isLive = false`, so callers can avoid
+  // animating historical title changes while still rendering them.
+  onTitleUpdated?: (title: string, isLive: boolean) => void
+  titleRegenerating?: boolean
+}
+
 function wsUrl(sessionId: string, ticket: string): string {
   const url = new URL(`/sessions/${sessionId}/ws`, window.location.href)
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
@@ -46,13 +55,12 @@ function wsUrl(sessionId: string, ticket: string): string {
   return url.toString()
 }
 
-export function useSessionSocket(
+export function useSessionState(
   sessionId: string | null,
-  onSessionClosed?: () => void,
-  // `isLive` is false while the title arrives during replay catch-up, so
-  // callers can avoid animating a change that didn't just happen.
-  onTitleUpdated?: (title: string, isLive: boolean) => void
+  options: SessionStateOptions = {}
 ) {
+  const queryClient = useQueryClient()
+  const { onTitleUpdated, titleRegenerating = false } = options
   const [state, dispatch] = useReducer(
     sessionTimelineReducer,
     initialSessionTimelineState
@@ -71,14 +79,28 @@ export function useSessionSocket(
   // arrives. Reset on every resume request, not once per connection.
   const resumedRef = useRef(false)
   const reconnectTimerRef = useRef<number | null>(null)
-  const onSessionClosedRef = useRef(onSessionClosed)
   const onTitleUpdatedRef = useRef(onTitleUpdated)
+
+  // Active session state is a projection of the live state owned here. Keep
+  // both session lists coherent because a title or busy update may arrive
+  // while the user is viewing either list.
+  const projectSession = useCallback(
+    (id: string, update: (session: SessionRecord) => SessionRecord) => {
+      for (const key of [queryKeys.sessions, queryKeys.archivedSessions]) {
+        queryClient.setQueryData<SessionRecord[]>(key, (current) =>
+          current?.map((session) =>
+            session.id === id ? update(session) : session
+          )
+        )
+      }
+    },
+    [queryClient]
+  )
 
   // Keep the latest callbacks without re-running the connection effect.
   useEffect(() => {
-    onSessionClosedRef.current = onSessionClosed
     onTitleUpdatedRef.current = onTitleUpdated
-  })
+  }, [onTitleUpdated])
 
   useEffect(() => {
     dispatch({ type: "reset" })
@@ -131,8 +153,19 @@ export function useSessionSocket(
               // On replay this is history, not worth re-alarming about.
               if (resumedRef.current) toast.error(event.message)
             } else if (event.type === "session_closed") {
-              onSessionClosedRef.current?.()
+              void queryClient.invalidateQueries({
+                queryKey: queryKeys.sessions,
+              })
+              void queryClient.invalidateQueries({
+                queryKey: queryKeys.archivedSessions,
+              })
             } else if (event.type === "title_updated") {
+              if (resumedRef.current) {
+                projectSession(sessionId, (session) => ({
+                  ...session,
+                  title: event.title,
+                }))
+              }
               onTitleUpdatedRef.current?.(event.title, resumedRef.current)
             }
             break
@@ -175,7 +208,35 @@ export function useSessionSocket(
       socketRef.current?.close()
       socketRef.current = null
     }
-  }, [sessionId])
+  }, [projectSession, queryClient, sessionId])
+
+  // The sidebar has no socket of its own. Project the live Turn state into
+  // both session lists as soon as the reducer changes it.
+  useEffect(() => {
+    if (!sessionId) return
+    projectSession(sessionId, (session) => ({
+      ...session,
+      busy: state.busy,
+      turnStartedAt: state.turnStartedAt,
+    }))
+  }, [projectSession, sessionId, state.busy, state.turnStartedAt])
+
+  // Title generation is a local UI state, but its working indicator belongs
+  // in the same session projection as agent busy state. Cleanup prevents an
+  // abandoned panel from leaving a stale sidebar indicator.
+  useEffect(() => {
+    if (!sessionId) return
+    projectSession(sessionId, (session) => ({
+      ...session,
+      titleRegenerating,
+    }))
+    return () => {
+      projectSession(sessionId, (session) => ({
+        ...session,
+        titleRegenerating: false,
+      }))
+    }
+  }, [projectSession, sessionId, titleRegenerating])
 
   const sendRaw = useCallback((payload: SessionCommand): boolean => {
     const socket = socketRef.current
@@ -284,3 +345,7 @@ export function useSessionSocket(
     regenerateTitle,
   }
 }
+
+// Keep the old name available for callers outside the current panel while
+// the session-state module becomes the canonical implementation.
+export const useSessionSocket = useSessionState
