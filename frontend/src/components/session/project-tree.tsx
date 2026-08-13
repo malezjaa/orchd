@@ -90,7 +90,6 @@ function FileTreeView({
         aria-label="Search files"
       />
 
-      <Separator />
       <div className="min-h-0 flex-1 overflow-hidden">
         <FileTree
           model={model}
@@ -111,21 +110,12 @@ export interface ProjectTreePanelProps {
   title: string
 }
 
-export function ProjectTreePanel({ rootPath, title }: ProjectTreePanelProps) {
+export function ProjectTreePanel({ rootPath }: ProjectTreePanelProps) {
   const { data, isLoading, isError } = useProjectTree(rootPath, true)
   const { expandedTreePaths } = useWorkspace()
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 px-3 py-3">
-      <div className="flex h-8 shrink-0 items-center px-1">
-        <span
-          className="truncate text-xs font-medium text-muted-foreground"
-          title={rootPath}
-        >
-          {title}
-        </span>
-      </div>
-
       {isLoading ? (
         <div className="flex flex-1 items-center justify-center text-muted-foreground">
           <Loader2 className="size-4 animate-spin" />
