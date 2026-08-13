@@ -9,10 +9,11 @@ pub fn extract_text(content: &[ContentPart]) -> String {
   content
     .iter()
     .map(|p| match p {
-      ContentPart::Text { text } => text.as_str(),
+      ContentPart::Text { text } => text.clone(),
+      ContentPart::Skill { name, .. } => format!("/{name}"),
     })
     .collect::<Vec<_>>()
-    .join("\n")
+    .join("")
 }
 
 /// Splits into word-ish chunks (word plus trailing whitespace) so streaming

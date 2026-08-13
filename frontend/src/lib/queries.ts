@@ -81,6 +81,20 @@ export function useModels() {
   })
 }
 
+export function useProjectSkills(
+  path: string | undefined,
+  agentKind: AgentKind,
+  enabled: boolean
+) {
+  const token = useAuthToken()
+  return useQuery({
+    queryKey: ["skills", path ?? "__none__", agentKind],
+    queryFn: () => api.listSkills(path as string, agentKind),
+    enabled: enabled && token !== null && Boolean(path),
+    staleTime: 30_000,
+  })
+}
+
 export function usePairDevice() {
   return useMutation({
     mutationFn: ({

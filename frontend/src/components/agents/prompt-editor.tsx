@@ -10,7 +10,7 @@ import {
   useEditor,
 } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
-import { CornerDownLeft, FileCode2 } from "lucide-react"
+import { CornerDownLeft, FileCode2, Sparkles } from "lucide-react"
 import {
   type KeyboardEvent,
   type MouseEvent,
@@ -22,9 +22,18 @@ import {
 } from "react"
 import { getFileIcon } from "@/lib/file-icon.tsx"
 import { searchFiles, type RankedFile } from "@/lib/file-search"
+import type { AgentSkill, ContentPart } from "@/lib/orchd"
+import { promptContentFromMarkdown } from "@/lib/prompt-content"
 import { cn } from "@/lib/utils"
+import { SkillMention } from "@/components/agents/skill-mention"
 
 interface FileTrigger {
+  from: number
+  to: number
+  query: string
+}
+
+interface SkillTrigger {
   from: number
   to: number
   query: string
@@ -57,6 +66,34 @@ function getFileTrigger(editor: Editor | null): FileTrigger | null {
   const trigger = findFileTrigger(textBefore, textBefore.length)
   if (!trigger) return null
 
+  return {
+    from: selection.from - (textBefore.length - trigger.start),
+    to: selection.from,
+    query: trigger.query,
+  }
+}
+
+function findSkillTrigger(
+  value: string,
+  cursor: number
+): { start: number; query: string } | null {
+  const match = /(?:^|[\s([{])\/([^\s]*)$/.exec(value.slice(0, cursor))
+  if (!match || !/^[\w-]*$/.test(match[1])) return null
+  return { start: cursor - match[1].length - 1, query: match[1] }
+}
+
+function getSkillTrigger(editor: Editor | null): SkillTrigger | null {
+  if (!editor || !editor.isFocused) return null
+  const selection = editor.state.selection
+  if (!selection.empty) return null
+  const textBefore = editor.state.doc.textBetween(
+    0,
+    selection.from,
+    "\n",
+    "\ufffc"
+  )
+  const trigger = findSkillTrigger(textBefore, textBefore.length)
+  if (!trigger) return null
   return {
     from: selection.from - (textBefore.length - trigger.start),
     to: selection.from,
@@ -130,6 +167,69 @@ const FileMentionNode = Node.create({
   },
 })
 
+const SkillMentionNode = Node.create({
+  name: "skillMention",
+  group: "inline",
+  inline: true,
+  atom: true,
+  selectable: false,
+  draggable: false,
+
+  addAttributes() {
+    return {
+      name: { default: "" },
+      path: { default: null },
+    }
+  },
+
+  parseHTML() {
+    return [{ tag: "span[data-skill-mention]" }]
+  },
+
+  renderHTML({ node, HTMLAttributes }) {
+    return [
+      "span",
+      mergeAttributes(HTMLAttributes, {
+        "data-skill-mention": "",
+        "data-skill-name": node.attrs.name,
+      }),
+      `/${node.attrs.name}`,
+    ]
+  },
+
+  renderText({ node }) {
+    return `/${node.attrs.name}`
+  },
+
+  parseMarkdown(token, helpers) {
+    return helpers.createNode("skillMention", {
+      name: token.name ?? "",
+    })
+  },
+
+  markdownTokenizer: {
+    name: "skillMention",
+    level: "inline" as const,
+    start(source: string) {
+      const match = /(?:^|[\s([{])\/([A-Za-z0-9][\w-]*)(?![\w/-])/.exec(source)
+      return match ? match.index + match[0].length - match[1].length : -1
+    },
+    tokenize(source: string) {
+      const match = /^\/([A-Za-z0-9][\w-]*)(?![\w/-])/.exec(source)
+      if (!match) return undefined
+      return { type: "skillMention", raw: match[0], name: match[1] }
+    },
+  },
+
+  renderMarkdown(node) {
+    return `/${node.attrs?.name ?? ""}`
+  },
+
+  addNodeView() {
+    return ReactNodeViewRenderer(SkillMentionView)
+  },
+})
+
 function FileMentionView({ node }: NodeViewProps) {
   const path = String(node.attrs.path ?? "")
   const Icon = getFileIcon(path)
@@ -148,6 +248,24 @@ function FileMentionView({ node }: NodeViewProps) {
   )
 }
 
+function useScrollActiveItem(activeIndex: number) {
+  const activeItemRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    activeItemRef.current?.scrollIntoView({ block: "nearest" })
+  }, [activeIndex])
+
+  return activeItemRef
+}
+
+function SkillMentionView({ node }: NodeViewProps) {
+  return (
+    <NodeViewWrapper as="span" contentEditable={false}>
+      <SkillMention name={String(node.attrs.name ?? "")} />
+    </NodeViewWrapper>
+  )
+}
+
 function FileSearchMenu({
   results,
   activeIndex,
@@ -157,6 +275,8 @@ function FileSearchMenu({
   activeIndex: number
   onSelect: (path: string) => void
 }) {
+  const activeItemRef = useScrollActiveItem(activeIndex)
+
   return (
     <div
       className="absolute inset-x-0 bottom-[calc(100%-0.25rem)] z-20 overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-xl ring-1 ring-foreground/5"
@@ -182,6 +302,7 @@ function FileSearchMenu({
             return (
               <button
                 key={result.path}
+                ref={index === activeIndex ? activeItemRef : undefined}
                 type="button"
                 role="option"
                 aria-selected={index === activeIndex}
@@ -222,11 +343,82 @@ function FileSearchMenu({
   )
 }
 
+function SkillSearchMenu({
+  results,
+  activeIndex,
+  onSelect,
+}: {
+  results: AgentSkill[]
+  activeIndex: number
+  onSelect: (skill: AgentSkill) => void
+}) {
+  const activeItemRef = useScrollActiveItem(activeIndex)
+
+  return (
+    <div
+      className="absolute inset-x-0 bottom-[calc(100%-0.25rem)] z-20 overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-xl ring-1 ring-foreground/5"
+      role="listbox"
+      aria-label="Skills"
+    >
+      <div className="flex items-center gap-2 border-b border-border px-2.5 py-1.5 text-[11px] text-muted-foreground">
+        <Sparkles className="size-3 text-sky-500" />
+        <span>Invoke a skill</span>
+        <span className="ml-auto font-mono text-[10px] opacity-70">
+          ↑↓ navigate · ↵ select
+        </span>
+      </div>
+      {results.length ? (
+        <div className="max-h-56 overflow-y-auto p-1">
+          {results.map((skill, index) => (
+            <button
+              key={skill.name}
+              ref={index === activeIndex ? activeItemRef : undefined}
+              type="button"
+              role="option"
+              aria-selected={index === activeIndex}
+              onMouseDown={(event) => {
+                event.preventDefault()
+                onSelect(skill)
+              }}
+              className={cn(
+                "group flex w-full items-start gap-2 rounded-lg px-2 py-1.5 text-left transition-colors outline-none",
+                index === activeIndex
+                  ? "bg-sky-500/10 text-foreground"
+                  : "hover:bg-muted"
+              )}
+            >
+              <Sparkles className="mt-0.5 size-3.5 shrink-0 text-sky-500" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-mono text-xs text-foreground">
+                  /{skill.name}
+                </span>
+                {skill.description ? (
+                  <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
+                    {skill.description}
+                  </span>
+                ) : null}
+              </span>
+              {index === activeIndex ? (
+                <CornerDownLeft className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+              ) : null}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="px-3 py-5 text-center text-xs text-muted-foreground">
+          No matching skills
+        </div>
+      )}
+    </div>
+  )
+}
+
 export interface PromptEditorProps {
   value: string
   onValueChange: (value: string) => void
-  onSubmit: () => void
+  onSubmit: (content: ContentPart[]) => void
   filePaths: readonly string[]
+  skills: readonly AgentSkill[]
   minRows: number
   maxRows: number
   placeholder: string
@@ -239,6 +431,7 @@ export function PromptEditor({
   onValueChange,
   onSubmit,
   filePaths,
+  skills,
   minRows,
   maxRows,
   placeholder,
@@ -248,7 +441,11 @@ export function PromptEditor({
   const onValueChangeRef = useRef(onValueChange)
   const [, setEditorVersion] = useState(0)
   const [activeFileIndex, setActiveFileIndex] = useState(0)
+  const [activeSkillIndex, setActiveSkillIndex] = useState(0)
   const [dismissedFileTrigger, setDismissedFileTrigger] = useState<
+    string | null
+  >(null)
+  const [dismissedSkillTrigger, setDismissedSkillTrigger] = useState<
     string | null
   >(null)
 
@@ -256,7 +453,7 @@ export function PromptEditor({
 
   const editor = useEditor(
     {
-      extensions: [StarterKit, FileMentionNode, Markdown],
+      extensions: [StarterKit, FileMentionNode, SkillMentionNode, Markdown],
       content: value,
       contentType: "markdown",
       editable: !disabled,
@@ -328,6 +525,22 @@ export function PromptEditor({
     : null
   const fileMenuOpen =
     fileTrigger !== null && dismissedFileTrigger !== fileTriggerKey
+  const skillTrigger = getSkillTrigger(editor)
+  const deferredSkillQuery = useDeferredValue(skillTrigger?.query ?? "")
+  const skillResults = useMemo(() => {
+    const query = deferredSkillQuery.trim().toLowerCase()
+    return skills.filter(
+      (skill) =>
+        !query ||
+        skill.name.toLowerCase().includes(query) ||
+        skill.description.toLowerCase().includes(query)
+    )
+  }, [deferredSkillQuery, skills])
+  const skillTriggerKey = skillTrigger
+    ? `${skillTrigger.from}:${skillTrigger.query}`
+    : null
+  const skillMenuOpen =
+    skillTrigger !== null && dismissedSkillTrigger !== skillTriggerKey
 
   useEffect(() => {
     setActiveFileIndex((index) =>
@@ -339,6 +552,17 @@ export function PromptEditor({
     setActiveFileIndex(0)
     setDismissedFileTrigger(null)
   }, [fileTriggerKey])
+
+  useEffect(() => {
+    setActiveSkillIndex((index) =>
+      skillResults.length ? Math.min(index, skillResults.length - 1) : 0
+    )
+  }, [skillResults.length])
+
+  useEffect(() => {
+    setActiveSkillIndex(0)
+    setDismissedSkillTrigger(null)
+  }, [skillTriggerKey])
 
   const selectFile = (path: string) => {
     if (!editor || !fileTrigger) return
@@ -354,7 +578,57 @@ export function PromptEditor({
       .run()
   }
 
+  const selectSkill = (skill: AgentSkill) => {
+    if (!editor || !skillTrigger) return
+    editor
+      .chain()
+      .focus()
+      .deleteRange({ from: skillTrigger.from, to: skillTrigger.to })
+      .insertContent([
+        {
+          type: "skillMention",
+          attrs: { name: skill.name, path: skill.path },
+        },
+        { type: "text", text: " " },
+      ])
+      .run()
+  }
+
   const handleKeyDownCapture = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (skillMenuOpen && event.key === "ArrowDown") {
+      event.preventDefault()
+      event.stopPropagation()
+      setActiveSkillIndex((index) =>
+        skillResults.length ? (index + 1) % skillResults.length : 0
+      )
+      return
+    }
+    if (skillMenuOpen && event.key === "ArrowUp") {
+      event.preventDefault()
+      event.stopPropagation()
+      setActiveSkillIndex((index) =>
+        skillResults.length
+          ? (index - 1 + skillResults.length) % skillResults.length
+          : 0
+      )
+      return
+    }
+    if (
+      skillMenuOpen &&
+      (event.key === "Enter" || event.key === "Tab") &&
+      skillResults[activeSkillIndex]
+    ) {
+      event.preventDefault()
+      event.stopPropagation()
+      selectSkill(skillResults[activeSkillIndex])
+      return
+    }
+    if (skillMenuOpen && event.key === "Escape") {
+      event.preventDefault()
+      event.stopPropagation()
+      setDismissedSkillTrigger(skillTriggerKey)
+      return
+    }
     if (fileMenuOpen && event.key === "ArrowDown") {
       event.preventDefault()
       event.stopPropagation()
@@ -396,7 +670,9 @@ export function PromptEditor({
     ) {
       event.preventDefault()
       event.stopPropagation()
-      onSubmit()
+      onSubmit(
+        promptContentFromMarkdown(editor?.getMarkdown() ?? value, skills)
+      )
     }
   }
 
@@ -407,7 +683,13 @@ export function PromptEditor({
       onKeyDownCapture={handleKeyDownCapture}
       data-disabled={disabled || undefined}
     >
-      {fileMenuOpen ? (
+      {skillMenuOpen ? (
+        <SkillSearchMenu
+          results={skillResults}
+          activeIndex={activeSkillIndex}
+          onSelect={selectSkill}
+        />
+      ) : fileMenuOpen ? (
         <FileSearchMenu
           results={fileResults}
           activeIndex={activeFileIndex}

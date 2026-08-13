@@ -467,10 +467,13 @@ impl Translator for ClaudeCodeTranslator {
         let text = content
           .iter()
           .map(|p| match p {
-            ContentPart::Text { text } => text.as_str(),
+            ContentPart::Text { text } => text.clone(),
+            // Claude Code resolves user-invocable skills from `/name`.
+            // Keep the product syntax intact for its stream-json input.
+            ContentPart::Skill { name, .. } => format!("/{name}"),
           })
           .collect::<Vec<_>>()
-          .join("\n");
+          .join("");
         let frame = json!({
             "type": "user",
             "message": { "role": "user", "content": [{ "type": "text", "text": text }] },

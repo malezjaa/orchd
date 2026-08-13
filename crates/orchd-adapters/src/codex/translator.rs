@@ -39,7 +39,7 @@ pub struct CodexTranslator {
   next_request_id: u64,
   pending_requests: HashMap<String, PendingRequest>,
   outgoing: VecDeque<Frame>,
-  pending_messages: VecDeque<(Uuid, String)>,
+  pending_messages: VecDeque<(Uuid, Vec<ContentPart>)>,
   pending_approvals: HashMap<ApprovalId, PendingApproval>,
   native_calls: HashMap<String, ToolCallId>,
   native_inputs: HashMap<String, Value>,
@@ -140,17 +140,38 @@ impl CodexTranslator {
   fn queue_turn(
     &mut self,
     client_msg_id: Uuid,
-    text: String,
+    content: Vec<ContentPart>,
   ) -> Result<(), AdapterError> {
     let Some(thread_id) = self.native_session_id.clone() else {
-      self.pending_messages.push_back((client_msg_id, text));
+      self.pending_messages.push_back((client_msg_id, content));
       return Ok(());
     };
+
+    let text = content
+      .iter()
+      .map(|part| match part {
+        ContentPart::Text { text } => text.clone(),
+        // Codex's native skill marker is `$name`. The structured item below
+        // gives the app-server the skill file path when the UI discovered it.
+        ContentPart::Skill { name, .. } => format!("${name}"),
+      })
+      .collect::<Vec<_>>()
+      .join("");
+    let skills = content.iter().filter_map(|part| match part {
+      ContentPart::Skill { name, path: Some(path) } => Some(json!({
+        "type": "skill",
+        "name": name,
+        "path": path,
+      })),
+      _ => None,
+    });
+    let mut input = vec![json!({ "type": "text", "text": text })];
+    input.extend(skills);
 
     let mut params = json!({
       "threadId": thread_id,
       "clientUserMessageId": client_msg_id.to_string(),
-      "input": [{ "type": "text", "text": text }],
+      "input": input,
     });
     if let Some(model) = &self.model {
       params["model"] = json!(model);
@@ -165,8 +186,8 @@ impl CodexTranslator {
   }
 
   fn flush_pending_messages(&mut self) -> Result<(), AdapterError> {
-    while let Some((client_msg_id, text)) = self.pending_messages.pop_front() {
-      self.queue_turn(client_msg_id, text)?;
+    while let Some((client_msg_id, content)) = self.pending_messages.pop_front() {
+      self.queue_turn(client_msg_id, content)?;
     }
     Ok(())
   }
@@ -620,14 +641,7 @@ impl Translator for CodexTranslator {
   fn encode(&mut self, cmd: &SessionCommand) -> Result<Vec<Frame>, AdapterError> {
     match cmd {
       SessionCommand::UserMessage { client_msg_id, content } => {
-        let text = content
-          .iter()
-          .map(|part| match part {
-            ContentPart::Text { text } => text.as_str(),
-          })
-          .collect::<Vec<_>>()
-          .join("\n");
-        self.queue_turn(*client_msg_id, text)?;
+        self.queue_turn(*client_msg_id, content.clone())?;
       }
       SessionCommand::Interrupt => {
         self.interrupt_requested = true;

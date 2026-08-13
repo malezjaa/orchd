@@ -21,14 +21,21 @@ import { FileView } from "@/components/session/file-view"
 import { useActiveSession } from "@/lib/active-session-context"
 import {
   agentIcon,
+  type AgentKind,
   type AgentMode,
   DEFAULT_ANTHROPIC_MODEL,
   DEFAULT_CODEX_MODEL,
+  type ContentPart,
   type ModelInfo,
   type PolicyRule,
   type ThinkingEffort,
 } from "@/lib/orchd"
-import { useCreateSession, useModels, useProjectTree } from "@/lib/queries"
+import {
+  useCreateSession,
+  useModels,
+  useProjectSkills,
+  useProjectTree,
+} from "@/lib/queries"
 import { finalAssistantTextIds, isHiddenToolCall } from "@/lib/timeline"
 import { groupTimelineByTurn, turnDurationSeconds } from "@/lib/timeline-groups"
 import { useWorkspace, type DraftSession } from "@/lib/workspace-context"
@@ -112,14 +119,22 @@ export function SessionPanel() {
   // Draft sessions do not have a live session cwd yet, but their selected
   // project is already the correct root for file references.
   const fileTreeRoot = treeRoot ?? draft?.project.path ?? null
+  const composerAgentKind = (session?.agent_kind ?? draft?.agentKind ??
+    "claude_code") as AgentKind
   const { data: projectTree } = useProjectTree(
     fileTreeRoot ?? undefined,
     Boolean(fileTreeRoot)
   )
-  // Typed before the session existed; sent once its socket comes up.
-  const [pendingFirstMessage, setPendingFirstMessage] = useState<string | null>(
-    null
+  const { data: skills = [] } = useProjectSkills(
+    fileTreeRoot ?? undefined,
+    composerAgentKind,
+    Boolean(fileTreeRoot)
   )
+  // Typed before the session existed; sent once its socket comes up.
+  const [pendingFirstMessage, setPendingFirstMessage] = useState<{
+    text: string
+    content?: ContentPart[]
+  } | null>(null)
   const [draftSettings, setDraftSettings] = useState<PendingSessionSettings>(
     EMPTY_PENDING_SETTINGS
   )
@@ -276,7 +291,7 @@ export function SessionPanel() {
     }
     if (draftSettings.permissionRules)
       updatePolicy(draftSettings.permissionRules)
-    sendUserMessage(pendingFirstMessage)
+    sendUserMessage(pendingFirstMessage.text, pendingFirstMessage.content)
     setPendingFirstMessage(null)
     setDraftSettings(EMPTY_PENDING_SETTINGS)
   }, [
@@ -328,7 +343,7 @@ export function SessionPanel() {
     [visibleEvents]
   )
 
-  const handleDraftSubmit = async (text: string) => {
+  const handleDraftSubmit = async (text: string, content?: ContentPart[]) => {
     if (!draft) return
     const trimmed = text.trim()
     if (!trimmed) return
@@ -337,7 +352,7 @@ export function SessionPanel() {
         agentKind: draft.agentKind,
         projectId: draft.project.id,
       })
-      setPendingFirstMessage(trimmed)
+      setPendingFirstMessage({ text: trimmed, content })
       sessionCreated(created)
     } catch (err) {
       toast.error("Couldn't create session", {
@@ -420,6 +435,7 @@ export function SessionPanel() {
             setDraftSettings((prev) => ({ ...prev, permissionRules }))
           }
           filePaths={projectTree?.files}
+          skills={skills}
         />
       </div>
     )
@@ -529,6 +545,7 @@ export function SessionPanel() {
                 onPermissionPreset={updatePolicy}
                 contextUsage={contextUsage}
                 filePaths={projectTree?.files}
+                skills={skills}
               />
             </>
           ) : activeFilePath && activeFile && fileTreeRoot ? (

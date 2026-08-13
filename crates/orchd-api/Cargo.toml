@@ -24,3 +24,4 @@ tracing.workspace = true
 tower_governor.workspace = true
 dashmap.workspace = true
 ignore.workspace = true
+dirs.workspace = true

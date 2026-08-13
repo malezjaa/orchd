@@ -32,6 +32,8 @@ import {
 } from "@/components/ui/tooltip"
 import { PromptEditor } from "@/components/agents/prompt-editor"
 import { SPRING_SWAP } from "@/lib/ease"
+import type { AgentSkill, ContentPart } from "@/lib/orchd"
+import { promptContentFromMarkdown } from "@/lib/prompt-content"
 import { cn } from "@/lib/utils"
 
 export interface PromptContextUsage {
@@ -247,7 +249,11 @@ export interface PromptInputProps extends Omit<
   onThinkingLevelChange?: (level: string) => void
   actions?: PromptAction[]
   onAction?: (action: string) => void
-  onSubmit?: (value: string, model?: string) => void | Promise<void>
+  onSubmit?: (
+    value: string,
+    model?: string,
+    content?: ContentPart[]
+  ) => void | Promise<void>
   loading?: boolean
   onStop?: () => void
   minRows?: number
@@ -257,6 +263,7 @@ export interface PromptInputProps extends Omit<
   // used. Omit while unknown, when no model or usage has been reported yet.
   contextUsage?: PromptContextUsage | null
   filePaths?: readonly string[]
+  skills?: readonly AgentSkill[]
   className?: string
 }
 
@@ -706,6 +713,7 @@ export function PromptInput({
   leadingAction,
   contextUsage,
   filePaths = [],
+  skills = [],
   className,
   disabled,
   placeholder = "Ask the agent to do something… use @ for files, / for commands",
@@ -767,12 +775,16 @@ export function PromptInput({
     onThinkingLevelChange?.(next)
   }
 
-  const submit = (event?: FormEvent) => {
+  const submit = (event?: FormEvent, content?: ContentPart[]) => {
     event?.preventDefault()
     const prompt = currentValue.trim()
     if (!prompt || disabled || loading) return
 
-    void onSubmit?.(prompt, currentModelValue)
+    void onSubmit?.(
+      prompt,
+      currentModelValue,
+      content ?? promptContentFromMarkdown(prompt, skills)
+    )
     if (value === undefined) setInternalValue("")
   }
 
@@ -788,8 +800,9 @@ export function PromptInput({
       <PromptEditor
         value={currentValue}
         onValueChange={setValue}
-        onSubmit={() => submit()}
+        onSubmit={(content) => submit(undefined, content)}
         filePaths={filePaths}
+        skills={skills}
         minRows={minRows}
         maxRows={maxRows}
         placeholder={placeholder}

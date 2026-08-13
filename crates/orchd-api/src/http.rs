@@ -42,11 +42,193 @@ pub fn router() -> Router<AppState> {
     .route("/fs/tree", get(file_tree))
     .route("/fs/contents", get(file_contents).put(write_file_contents))
     .route("/models", get(list_models))
+    .route("/skills", get(list_skills))
     .route("/settings", get(get_settings).patch(update_settings))
 }
 
 async fn list_models() -> Json<&'static [ModelInfo]> {
   Json(orchd_core::SUPPORTED_MODELS)
+}
+
+#[derive(Deserialize)]
+pub struct ListSkillsQuery {
+  pub path: String,
+  #[serde(default = "default_skill_agent")]
+  pub agent_kind: AgentKind,
+}
+
+fn default_skill_agent() -> AgentKind {
+  AgentKind::ClaudeCode
+}
+
+#[derive(Clone, Serialize)]
+pub struct SkillRecord {
+  pub name: String,
+  pub description: String,
+  pub path: String,
+}
+
+/// Lists the skills visible to the selected agent for one project. The
+/// directory scan runs off the async executor because skill files are local
+/// user input and may live in several home/project roots.
+async fn list_skills(
+  Query(query): Query<ListSkillsQuery>,
+) -> Result<Json<Vec<SkillRecord>>, ApiError> {
+  let root = std::fs::canonicalize(&query.path)
+    .map_err(|err| ApiError::bad_request(format!("cannot open project: {err}")))?;
+  if !root.is_dir() {
+    return Err(ApiError::bad_request("project path is not a directory"));
+  }
+
+  let agent = query.agent_kind;
+  let skills = tokio::task::spawn_blocking(move || discover_skills(&root, agent))
+    .await
+    .map_err(|_| ApiError::internal("skill discovery task failed"))?;
+
+  Ok(Json(skills))
+}
+
+fn discover_skills(root: &std::path::Path, agent: AgentKind) -> Vec<SkillRecord> {
+  let home = dirs::home_dir();
+  let mut roots = Vec::new();
+  let mut add_root = |path: std::path::PathBuf| {
+    if !roots.iter().any(|existing: &std::path::PathBuf| existing == &path) {
+      roots.push(path);
+    }
+  };
+
+  // The shared Agent Skills location is useful when one project is driven by
+  // both agents. Agent-specific locations retain native discovery behavior.
+  add_root(root.join(".agents/skills"));
+  if let Some(home) = &home {
+    add_root(home.join(".agents/skills"));
+  }
+  match agent {
+    AgentKind::ClaudeCode => {
+      add_root(root.join(".claude/skills"));
+      if let Some(home) = &home {
+        add_root(home.join(".claude/skills"));
+      }
+    }
+    AgentKind::Codex => {
+      add_root(root.join(".codex/skills"));
+      if let Some(home) = &home {
+        add_root(home.join(".codex/skills"));
+      }
+      if let Some(codex_home) = std::env::var_os("CODEX_HOME") {
+        add_root(std::path::PathBuf::from(codex_home).join("skills"));
+      }
+    }
+    _ => return Vec::new(),
+  }
+
+  discover_skills_from_roots(roots)
+}
+
+fn discover_skills_from_roots(roots: Vec<std::path::PathBuf>) -> Vec<SkillRecord> {
+  let mut by_name = std::collections::BTreeMap::new();
+  for skills_root in roots {
+    for skill_path in skill_files(&skills_root) {
+      let Ok(contents) = std::fs::read_to_string(&skill_path) else { continue };
+      let Some((name, description)) = parse_skill_frontmatter(&contents) else {
+        continue;
+      };
+      if by_name.contains_key(&name) {
+        continue;
+      }
+      by_name.insert(
+        name.clone(),
+        SkillRecord {
+          name,
+          description,
+          path: skill_path.to_string_lossy().into_owned(),
+        },
+      );
+    }
+  }
+  by_name.into_values().collect()
+}
+
+/// Skill roots normally contain skill directories directly. A small number
+/// of installations use one grouping directory, such as `.system`, so allow
+/// one nested level without walking arbitrary project content.
+fn skill_files(root: &std::path::Path) -> Vec<std::path::PathBuf> {
+  let Ok(entries) = std::fs::read_dir(root) else {
+    return Vec::new();
+  };
+  let mut files = Vec::new();
+  for entry in entries.flatten() {
+    let path = entry.path();
+    if !path.is_dir() {
+      continue;
+    }
+    let skill_file = path.join("SKILL.md");
+    if skill_file.is_file() {
+      files.push(skill_file);
+      continue;
+    }
+    let Ok(nested_entries) = std::fs::read_dir(path) else {
+      continue;
+    };
+    for nested_entry in nested_entries.flatten() {
+      let nested_path = nested_entry.path();
+      if nested_path.is_dir() {
+        let skill_file = nested_path.join("SKILL.md");
+        if skill_file.is_file() {
+          files.push(skill_file);
+        }
+      }
+    }
+  }
+  files
+}
+
+fn parse_skill_frontmatter(contents: &str) -> Option<(String, String)> {
+  let mut lines = contents.lines();
+  if lines.next()?.trim() != "---" {
+    return None;
+  }
+  let mut name = None;
+  let mut description = None;
+  for line in lines {
+    let trimmed = line.trim();
+    if trimmed == "---" {
+      break;
+    }
+    let Some((key, value)) = trimmed.split_once(':') else { continue };
+    let value = value.trim().trim_matches(['"', '\'']);
+    match key.trim() {
+      "name" if !value.is_empty() => name = Some(value.to_string()),
+      "description" if !value.is_empty() => description = Some(value.to_string()),
+      _ => {}
+    }
+  }
+  Some((name?, description.unwrap_or_default()))
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn discovers_skills_in_a_grouped_root() {
+    let root =
+      std::env::temp_dir().join(format!("orchd-api-skills-{}", uuid::Uuid::new_v4()));
+    let skill_dir = root.join(".system/example");
+    std::fs::create_dir_all(&skill_dir).expect("create skill fixture");
+    std::fs::write(
+      skill_dir.join("SKILL.md"),
+      "---\nname: example\ndescription: Test skill\n---\n",
+    )
+    .expect("write skill fixture");
+
+    let skills = discover_skills_from_roots(vec![root.clone()]);
+
+    assert_eq!(skills.len(), 1);
+    assert_eq!(skills[0].name, "example");
+    assert_eq!(skills[0].description, "Test skill");
+    let _ = std::fs::remove_dir_all(root);
+  }
 }
 
 #[derive(Deserialize)]

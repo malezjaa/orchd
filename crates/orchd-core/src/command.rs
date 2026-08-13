@@ -6,7 +6,16 @@ use crate::{ids::ApprovalId, permission::Decision};
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentPart {
-  Text { text: String },
+  Text {
+    text: String,
+  },
+  /// A user-selected agent skill. The UI uses `/name`; adapters translate
+  /// that product syntax to the native invocation syntax for each agent.
+  Skill {
+    name: String,
+    #[serde(default)]
+    path: Option<String>,
+  },
 }
 
 /// Placeholder for the auto-approve policy DSL; carried through the command

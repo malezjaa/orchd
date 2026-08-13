@@ -21,6 +21,8 @@ import type {
 import { PromptInput } from "@/components/agents/prompt-input"
 import type {
   AgentMode,
+  AgentSkill,
+  ContentPart,
   ModelInfo,
   PolicyRule,
   ThinkingEffort,
@@ -37,7 +39,7 @@ export interface SessionComposerProps {
   loading: boolean
   disabled?: boolean
   onStop: () => void
-  onSubmit: (value: string) => void
+  onSubmit: (value: string, content?: ContentPart[]) => void
   // Seeds the model picker's initial selection.
   currentModel?: string | null
   currentFastMode?: boolean | null
@@ -51,6 +53,7 @@ export interface SessionComposerProps {
   onPermissionPreset?: (rules: PolicyRule[]) => void
   contextUsage?: PromptContextUsage | null
   filePaths?: readonly string[]
+  skills?: readonly AgentSkill[]
 }
 
 const MODES: PromptOption[] = [
@@ -193,6 +196,7 @@ export function SessionComposer({
   onPermissionPreset,
   contextUsage,
   filePaths,
+  skills = [],
 }: SessionComposerProps) {
   const [selectedModel, setSelectedModel] = useState<string | undefined>(
     currentModel ?? undefined
@@ -279,7 +283,7 @@ export function SessionComposer({
           loading={loading}
           disabled={disabled}
           onStop={onStop}
-          onSubmit={onSubmit}
+          onSubmit={(value, _model, content) => onSubmit(value, content)}
           minRows={2}
           maxRows={8}
           placeholder={
@@ -314,6 +318,7 @@ export function SessionComposer({
           }}
           contextUsage={contextUsage}
           filePaths={filePaths}
+          skills={skills}
         />
       </div>
     </div>

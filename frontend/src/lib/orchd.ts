@@ -73,6 +73,12 @@ export interface ProjectRecord {
   updated_at: string
 }
 
+export interface AgentSkill {
+  name: string
+  description: string
+  path: string
+}
+
 export interface SettingsRecord {
   interface_font: string | null
   interface_font_size: string | null
@@ -273,7 +279,9 @@ export interface PolicyRule {
   pattern: string | null
 }
 
-export type ContentPart = { type: "text"; text: string }
+export type ContentPart =
+  | { type: "text"; text: string }
+  | { type: "skill"; name: string; path: string | null }
 
 // Plan researches and proposes without making changes. Independent of the
 // policy engine, which gates what's auto-approved, not what's attempted.

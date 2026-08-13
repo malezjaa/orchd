@@ -84,7 +84,9 @@ function toolResultKind(canonical: ToolRef["canonical"]): ToolResultKind {
 }
 
 function contentPartsToText(content: ContentPart[]): string {
-  return content.map((part) => part.text).join("\n")
+  return content
+    .map((part) => (part.type === "text" ? part.text : `/${part.name}`))
+    .join("\n")
 }
 
 // Thinking is a "working on it" indicator, not a transcript entry, so its

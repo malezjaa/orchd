@@ -216,6 +216,7 @@ impl SessionActor {
             turn,
           )
           .await;
+        self.emit_skill_invocations(&content, turn).await;
         self.echo_turn(&content, turn).await;
         false
       }
@@ -702,6 +703,7 @@ impl SessionActor {
             turn,
           )
           .await;
+        self.emit_skill_invocations(content, turn).await;
       }
       SessionCommand::ResolveApproval { request_id, decision } => {
         self.resolve_approval(translator, stdin, *request_id, decision.clone()).await;
@@ -760,6 +762,25 @@ impl SessionActor {
       }
     }
     false
+  }
+
+  async fn emit_skill_invocations(
+    &mut self,
+    content: &[orchd_core::ContentPart],
+    turn: TurnId,
+  ) {
+    for part in content {
+      let orchd_core::ContentPart::Skill { name, path } = part else { continue };
+      self
+        .emit(
+          EventPayload::SkillInvoked {
+            skill: name.clone(),
+            args: serde_json::json!({ "path": path }),
+          },
+          turn,
+        )
+        .await;
+    }
   }
 
   // ---- Permissions --------------------------------------------------

@@ -252,17 +252,17 @@ export function useSessionState(
   }, [])
 
   const sendUserMessage = useCallback(
-    (text: string) => {
+    (text: string, content?: ContentPart[]) => {
       const trimmed = text.trim()
       if (!trimmed) return
-      const content: ContentPart[] = [{ type: "text", text: trimmed }]
+      const messageContent = content ?? [{ type: "text", text: trimmed }]
       // The server mirrors this id back on the persisted `user_message`,
       // so the optimistic entry below reconciles instead of duplicating.
       const clientMsgId = crypto.randomUUID()
       const ok = sendRaw({
         type: "user_message",
         client_msg_id: clientMsgId,
-        content,
+        content: messageContent,
       })
       if (!ok) {
         toast.error("Not connected to the session yet")

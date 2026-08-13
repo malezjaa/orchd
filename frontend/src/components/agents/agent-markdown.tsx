@@ -9,6 +9,7 @@ import type { AgentCodeLanguage } from "@/components/agents/agent-code"
 import { CodeBlock } from "@/components/agents/code-block"
 import { ColorSwatch } from "@/components/agents/color-swatch"
 import { FileMention } from "@/components/agents/file-mention"
+import { SkillMention } from "@/components/agents/skill-mention"
 import { parseHexColor } from "@/lib/markdown-color"
 import { parsePathMention } from "@/lib/markdown-path"
 import { cn } from "@/lib/utils"
@@ -40,6 +41,7 @@ interface MarkdownNode {
 }
 
 const AT_PATH_PATTERN = /(^|[\s([{<'"])(@[\w./-]+)/g
+const SLASH_SKILL_PATTERN = /(^|[\s([{<'"])(\/[A-Za-z0-9][\w-]*)(?![\w/-])/g
 
 function remarkFileMentions() {
   return (tree: MarkdownNode) => {
@@ -75,6 +77,50 @@ function remarkFileMentions() {
         if (cursor === 0) {
           nextChildren.push(child)
         } else if (cursor < child.value.length) {
+          nextChildren.push({
+            type: "text",
+            value: child.value.slice(cursor),
+          })
+        }
+      }
+      node.children = nextChildren
+    }
+
+    transform(tree)
+  }
+}
+
+function remarkSkillMentions() {
+  return (tree: MarkdownNode) => {
+    const transform = (node: MarkdownNode) => {
+      if (!node.children) return
+
+      const nextChildren: MarkdownNode[] = []
+      for (const child of node.children) {
+        if (child.type !== "text" || !child.value) {
+          transform(child)
+          nextChildren.push(child)
+          continue
+        }
+
+        let cursor = 0
+        let match: RegExpExecArray | null
+        SLASH_SKILL_PATTERN.lastIndex = 0
+        while ((match = SLASH_SKILL_PATTERN.exec(child.value)) !== null) {
+          const raw = match[2]
+          const start = match.index + match[1].length
+          if (start > cursor) {
+            nextChildren.push({
+              type: "text",
+              value: child.value.slice(cursor, start),
+            })
+          }
+          nextChildren.push({ type: "inlineCode", value: raw })
+          cursor = start + raw.length
+        }
+
+        if (cursor === 0) nextChildren.push(child)
+        else if (cursor < child.value.length) {
           nextChildren.push({
             type: "text",
             value: child.value.slice(cursor),
@@ -133,6 +179,10 @@ function InlineCode({
       />
     )
   }
+  const skill = /^\/([A-Za-z0-9][\w-]*)$/.exec(text)
+  if (skill) {
+    return <SkillMention name={skill[1]} />
+  }
   const hexColor = parseHexColor(text)
   if (hexColor) {
     return <ColorSwatch color={hexColor} />
@@ -186,7 +236,7 @@ export const AgentMarkdown = memo(function AgentMarkdown({
   return (
     <div className={cn("typeset typeset-docs max-w-none", className)}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkFileMentions]}
+        remarkPlugins={[remarkGfm, remarkFileMentions, remarkSkillMentions]}
         components={components}
       >
         {content}

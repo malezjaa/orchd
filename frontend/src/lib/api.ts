@@ -5,6 +5,7 @@
 import { clearAuthToken, getAuthToken } from "@/lib/auth"
 import type {
   AgentKind,
+  AgentSkill,
   ClientSessionRecord,
   FileContentsResponse,
   FileTreeResponse,
@@ -148,6 +149,11 @@ export const api = {
     ),
 
   listModels: () => request<ModelInfo[]>("/models"),
+
+  listSkills: (path: string, agentKind: AgentKind) =>
+    request<AgentSkill[]>(
+      `/skills?path=${encodeURIComponent(path)}&agent_kind=${encodeURIComponent(agentKind)}`,
+    ),
 
   getSettings: () => request<SettingsRecord>("/settings"),
 
