@@ -1,11 +1,20 @@
 import { useEffect, useRef, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
-import { Cpu, Files, GitBranch, Loader2, SquareTerminal } from "lucide-react"
+import {
+  Activity,
+  Cpu,
+  Files,
+  GitBranch,
+  Loader2,
+  SquareTerminal,
+} from "lucide-react"
 import { TooltipIcon } from "@/components/tooltip-icon.tsx"
 import { EASE_DRAWER } from "@/lib/ease.ts"
 import { cn } from "@/lib/utils.ts"
-import { basename } from "@/lib/orchd"
+import { basename, type ModelInfo, type SessionContext } from "@/lib/orchd"
+import type { SessionTimelineState } from "@/lib/session-timeline"
 import { ProjectTreePanel } from "@/components/session/project-tree.tsx"
+import { RunInsightsPanel } from "./run-insights-panel.tsx"
 import { GitPanel } from "./git-panel.tsx"
 import { ProcessesPanel } from "./processes-panel.tsx"
 import { TerminalPanel } from "./terminal-panel.tsx"
@@ -27,7 +36,17 @@ interface RailAction {
   id: string
   label: string
   icon: (props: { className?: string }) => React.ReactNode
-  render: (sessionId: string | null, rootPath: string | null) => React.ReactNode
+  render: (
+    sessionId: string | null,
+    rootPath: string | null,
+    insights: SessionInsightsInput | null
+  ) => React.ReactNode
+}
+
+export interface SessionInsightsInput {
+  state: SessionTimelineState
+  context: SessionContext | null
+  model?: ModelInfo
 }
 
 function DeferredGitPanel({ rootPath }: { rootPath: string }) {
@@ -62,6 +81,13 @@ const RAIL_ACTIONS: RailAction[] = [
           title={basename(rootPath)}
         />
       ) : null,
+  },
+  {
+    id: "insights",
+    label: "Run insights",
+    icon: (p) => <Activity className={p.className} />,
+    render: (_sessionId, _rootPath, insights) =>
+      insights ? <RunInsightsPanel {...insights} /> : null,
   },
   {
     id: "git",
@@ -117,9 +143,11 @@ const PANEL_CLOSED = { width: 0, opacity: 0 }
 export function SessionIconRail({
   sessionId,
   rootPath,
+  insights = null,
 }: {
   sessionId: string | null
   rootPath: string | null
+  insights?: SessionInsightsInput | null
 }) {
   const [active, setActive] = useState<string | null>("files")
   const [width, setWidthState] = useState(getStoredPanelWidth)
@@ -214,7 +242,7 @@ export function SessionIconRail({
               </p>
             </div>
             <div className="grid min-h-0 flex-1 border-l border-border">
-              {activeAction.render(sessionId, rootPath) ?? (
+              {activeAction.render(sessionId, rootPath, insights) ?? (
                 <p
                   className="m-auto max-w-[200px] px-4 py-6 text-center text-xs text-muted-foreground"
                   id={`${activeAction.label}-panel`}

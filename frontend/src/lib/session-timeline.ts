@@ -25,6 +25,17 @@ export interface SessionUsage {
   output_tokens: number
   cache_creation_input_tokens: number
   cache_read_input_tokens: number
+  cost_usd: number | null
+}
+
+export interface LongestTool {
+  name: string
+  durationSeconds: number
+}
+
+export interface SessionInsights {
+  sessionCostUsd: number | null
+  longestTool: LongestTool | null
 }
 
 export interface SessionTimelineState {
@@ -37,6 +48,9 @@ export interface SessionTimelineState {
   model: string | null
   // `null` until the first `usage_update`; same fallback as `model`.
   usage: SessionUsage | null
+  insights: SessionInsights
+  toolStarts: Record<string, { name: string; startedAt: string }>
+  costByTurn: Record<string, number | null>
 }
 
 export const initialSessionTimelineState: SessionTimelineState = {
@@ -45,6 +59,12 @@ export const initialSessionTimelineState: SessionTimelineState = {
   turnStartedAt: null,
   model: null,
   usage: null,
+  insights: {
+    sessionCostUsd: null,
+    longestTool: null,
+  },
+  toolStarts: {},
+  costByTurn: {},
 }
 
 export type SessionTimelineAction =
@@ -273,6 +293,48 @@ export function sessionTimelineReducer(
       const turnStartedAt = turnEnded ? null : state.turnStartedAt
       const model =
         event.type === "session_init" && event.model ? event.model : state.model
+      const toolStarts = { ...state.toolStarts }
+      let insights = state.insights
+
+      if (event.type === "tool_call_requested") {
+        toolStarts[event.call_id] = {
+          name: event.tool.native_name,
+          startedAt: event.ts,
+        }
+      } else if (event.type === "tool_call_completed") {
+        const started = toolStarts[event.call_id]
+        delete toolStarts[event.call_id]
+        if (started) {
+          const durationSeconds =
+            (Date.parse(event.ts) - Date.parse(started.startedAt)) / 1000
+          if (
+            Number.isFinite(durationSeconds) &&
+            durationSeconds >= 0 &&
+            (!insights.longestTool ||
+              durationSeconds > insights.longestTool.durationSeconds)
+          ) {
+            insights = {
+              ...insights,
+              longestTool: {
+                name: started.name,
+                durationSeconds: Math.round(durationSeconds),
+              },
+            }
+          }
+        }
+      }
+
+      const costByTurn = { ...state.costByTurn }
+      if (event.type === "usage_update") {
+        // Usage updates carry a complete total for their turn. Store the
+        // latest value so a streaming adapter cannot double-count a turn.
+        costByTurn[event.turn] = event.cost_usd
+      }
+      const costs = Object.values(costByTurn)
+      const sessionCostUsd = costs.some((cost) => cost !== null)
+        ? costs.reduce<number>((total, cost) => total + (cost ?? 0), 0)
+        : null
+      insights = { ...insights, sessionCostUsd }
       const usage: SessionUsage | null =
         event.type === "usage_update"
           ? {
@@ -280,9 +342,19 @@ export function sessionTimelineReducer(
               output_tokens: event.output_tokens,
               cache_creation_input_tokens: event.cache_creation_input_tokens,
               cache_read_input_tokens: event.cache_read_input_tokens,
+              cost_usd: event.cost_usd,
             }
           : state.usage
-      return { events, busy, turnStartedAt, model, usage }
+      return {
+        events,
+        busy,
+        turnStartedAt,
+        model,
+        usage,
+        insights,
+        toolStarts,
+        costByTurn,
+      }
     }
 
     case "append_user_message":

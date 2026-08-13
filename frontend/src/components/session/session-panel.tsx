@@ -578,7 +578,15 @@ export function SessionPanel() {
           )}
         </div>
 
-        <SessionIconRail sessionId={session.id} rootPath={fileTreeRoot} />
+        <SessionIconRail
+          sessionId={session.id}
+          rootPath={fileTreeRoot}
+          insights={{
+            state,
+            context: context ?? null,
+            model: liveCatalogEntry,
+          }}
+        />
       </div>
     </div>
   )
