@@ -1,4 +1,11 @@
-import { Bot, PanelLeft, TriangleAlert } from "lucide-react"
+import {
+  ChevronDown,
+  Folder,
+  FolderPlus,
+  PanelLeft,
+  TriangleAlert,
+} from "lucide-react"
+import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import {
   Fragment,
   useCallback,
@@ -6,6 +13,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
 } from "react"
 import { toast } from "sonner"
 import type { PromptContextUsage } from "@/components/agents/prompt-input"
@@ -30,6 +38,7 @@ import {
   type ContentPart,
   type ModelInfo,
   type PolicyRule,
+  type ProjectRecord,
   type ThinkingEffort,
 } from "@/lib/orchd"
 import {
@@ -42,6 +51,10 @@ import {
 import { finalAssistantTextIds, isHiddenToolCall } from "@/lib/timeline"
 import { groupTimelineByTurn, turnDurationSeconds } from "@/lib/timeline-groups"
 import { useWorkspace, type DraftSession } from "@/lib/workspace-context"
+import {
+  CommandPalette,
+  type CommandItem,
+} from "@/components/motion/command-palette"
 
 // Stable identity so the loading fallback doesn't defeat memoization.
 const EMPTY_MODELS: ModelInfo[] = []
@@ -66,23 +79,136 @@ const EMPTY_PENDING_SETTINGS: PendingSessionSettings = {
 
 const LIVE_STATUSES = new Set(["creating", "running", "interrupted"])
 
-function EmptyState({
-  title,
-  description,
+const LANDING_PROMPTS = [
+  "What are we building in",
+  "What should we build in",
+  "What can we make in",
+  "What are you imagining in",
+  "What are we bringing to life in",
+  "What can we improve in",
+  "What are we shaping in",
+  "What should we explore in",
+  "What could we launch from",
+  "What can we ship from",
+  "What will we create in",
+  "What’s next for",
+  "What should we prototype in",
+  "What are we solving in",
+]
+
+function ProjectPicker({
+  open,
+  projects,
+  onOpenChange,
+  onSelect,
+  onCreate,
 }: {
-  title: string
-  description: string
+  open: boolean
+  projects: ProjectRecord[]
+  onOpenChange: (open: boolean) => void
+  onSelect: (project: ProjectRecord) => void
+  onCreate: () => void
 }) {
+  const items: CommandItem[] = [
+    ...projects.map((project) => ({
+      id: project.id,
+      label: project.name,
+      description: project.path,
+      group: "Projects",
+      icon: Folder,
+      keywords: [project.path],
+      onSelect: () => onSelect(project),
+    })),
+    {
+      id: "__new_project__",
+      label: "New project…",
+      description: "Pick a local folder to start a project",
+      group: "Actions",
+      icon: FolderPlus,
+      onSelect: onCreate,
+    },
+  ]
+
   return (
-    <div className="grid flex-1 place-items-center">
-      <div className="max-w-sm text-center">
-        <div className="mx-auto grid size-10 place-items-center rounded-xl bg-muted text-muted-foreground">
-          <Bot className="size-5" />
+    <CommandPalette
+      items={items}
+      open={open}
+      onOpenChange={onOpenChange}
+      placeholder="Choose a project…"
+      emptyMessage="No matching projects."
+      shortcut={null}
+    />
+  )
+}
+
+function LandingState({
+  prompt,
+  project,
+  onProjectClick,
+  composer,
+}: {
+  prompt: string
+  project: ProjectRecord | null
+  onProjectClick: () => void
+  composer: ReactNode
+}) {
+  const reduce = useReducedMotion() ?? false
+
+  return (
+    <main className="flex min-h-0 flex-1 items-center justify-center px-4 py-8">
+      <div className="w-full max-w-2xl -translate-y-3">
+        <div className="mb-4 text-center">
+          <p className="text-xl font-medium tracking-tight text-foreground sm:text-2xl">
+            <span className="inline-grid align-baseline">
+              <AnimatePresence initial={false} mode="wait">
+                <motion.span
+                  key={prompt}
+                  initial={{
+                    opacity: 0,
+                    transform: reduce
+                      ? "translateY(0)"
+                      : "translateY(0.4em)",
+                  }}
+                  animate={{ opacity: 1, transform: "translateY(0)" }}
+                  exit={{
+                    opacity: 0,
+                    transform: reduce
+                      ? "translateY(0)"
+                      : "translateY(-0.4em)",
+                  }}
+                  transition={
+                    reduce
+                      ? { duration: 0.12 }
+                      : {
+                          duration: 0.22,
+                          ease: [0.23, 1, 0.32, 1],
+                        }
+                  }
+                  className="col-start-1 row-start-1 whitespace-nowrap"
+                >
+                  {prompt}
+                </motion.span>
+              </AnimatePresence>
+            </span>{" "}
+            <button
+              type="button"
+              onClick={onProjectClick}
+              className="inline-flex max-w-full items-center gap-1 rounded-md text-primary underline decoration-primary/30 underline-offset-4 outline-none transition-colors hover:decoration-primary/70 focus-visible:ring-2 focus-visible:ring-ring/50"
+            >
+              <span className="truncate">
+                {project?.name ?? "a project"}
+              </span>
+              <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+            </button>
+            <span>?</span>
+          </p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Describe an idea and let your agent take it from there.
+          </p>
         </div>
-        <p className="mt-3 text-sm font-medium text-foreground">{title}</p>
-        <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+        {composer}
       </div>
-    </div>
+    </main>
   )
 }
 
@@ -119,11 +245,13 @@ export function SessionPanel() {
   const {
     activeSession: session,
     draft,
+    projects,
     currentTab,
     switchActiveTab,
     treeRoot,
     sessionCreated,
     sessionDeleted,
+    setNewProjectOpen,
   } = useWorkspace()
   const createSession = useCreateSession()
   const { data: settings } = useSettings()
@@ -143,9 +271,29 @@ export function SessionPanel() {
       : undefined) ??
     configuredModel?.default_reasoning_effort ??
     DEFAULT_REASONING_EFFORT
+
+  const [pendingFirstMessage, setPendingFirstMessage] = useState<{
+    text: string
+    content?: ContentPart[]
+  } | null>(null)
+  const [draftSettings, setDraftSettings] = useState<PendingSessionSettings>(
+    EMPTY_PENDING_SETTINGS
+  )
+  const [projectPickerOpen, setProjectPickerOpen] = useState(false)
+  const [landingProjectId, setLandingProjectId] = useState<string | null>(
+    null
+  )
+  const [landingPromptIndex, setLandingPromptIndex] = useState(0)
+
+  const landingProject =
+    projects.find((project) => project.id === landingProjectId) ??
+    projects[0] ??
+    null
+
   // Draft sessions do not have a live session cwd yet, but their selected
   // project is already the correct root for file references.
-  const fileTreeRoot = treeRoot ?? draft?.project.path ?? null
+  const fileTreeRoot =
+    treeRoot ?? draft?.project.path ?? landingProject?.path ?? null
   const composerAgentKind = (session?.agent_kind ??
     configuredAgentKind) as AgentKind
   const { data: projectTree } = useProjectTree(
@@ -157,14 +305,13 @@ export function SessionPanel() {
     composerAgentKind,
     Boolean(fileTreeRoot)
   )
-  // Typed before the session existed; sent once its socket comes up.
-  const [pendingFirstMessage, setPendingFirstMessage] = useState<{
-    text: string
-    content?: ContentPart[]
-  } | null>(null)
-  const [draftSettings, setDraftSettings] = useState<PendingSessionSettings>(
-    EMPTY_PENDING_SETTINGS
-  )
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setLandingPromptIndex((index) => (index + 1) % LANDING_PROMPTS.length)
+    }, 5_000)
+    return () => window.clearInterval(timer)
+  }, [])
 
   // Reset synchronously during render, not in an effect, so switching
   // drafts can't flash the previous draft's settings for a frame.
@@ -363,13 +510,16 @@ export function SessionPanel() {
     [visibleEvents]
   )
 
-  const handleDraftSubmit = async (text: string, content?: ContentPart[]) => {
-    if (!draft) return
+  const handleSubmitForProject = async (
+    project: ProjectRecord,
+    text: string,
+    content?: ContentPart[]
+  ) => {
     const trimmed = text.trim()
     if (!trimmed) return
     try {
       const created = await createSession.mutateAsync({
-        projectId: draft.project.id,
+        projectId: project.id,
       })
       setPendingFirstMessage({ text: trimmed, content })
       sessionCreated(created)
@@ -378,6 +528,22 @@ export function SessionPanel() {
         description: err instanceof Error ? err.message : undefined,
       })
     }
+  }
+
+  const handleDraftSubmit = async (text: string, content?: ContentPart[]) => {
+    if (!draft) return
+    await handleSubmitForProject(draft.project, text, content)
+  }
+
+  const handleLandingSubmit = async (
+    text: string,
+    content?: ContentPart[]
+  ) => {
+    if (!landingProject) {
+      toast.error("Choose a project first")
+      return
+    }
+    await handleSubmitForProject(landingProject, text, content)
   }
 
   const activeFile = currentTab.type === "path" ? currentTab.file : null
@@ -410,9 +576,56 @@ export function SessionPanel() {
           <div className="flex-1" />
           <GitHubAccount />
         </header>
-        <EmptyState
-          title="No session selected"
-          description="Choose a session from the sidebar, or start a new one."
+        <LandingState
+          prompt={LANDING_PROMPTS[landingPromptIndex]}
+          project={landingProject}
+          onProjectClick={() => setProjectPickerOpen(true)}
+          composer={
+            <SessionComposer
+              agentKind={configuredAgentKind}
+              loading={createSession.isPending}
+              onStop={() => {}}
+              onSubmit={handleLandingSubmit}
+              centered
+              models={models}
+              currentModel={draftSettings.model ?? configuredModelId}
+              currentEffort={
+                draftSettings.effort ?? configuredReasoningEffort
+              }
+              currentFastMode={draftSettings.fastMode}
+              onModelChange={(model) =>
+                setDraftSettings((prev) => ({ ...prev, model }))
+              }
+              onModeChange={(mode) =>
+                setDraftSettings((prev) => ({ ...prev, mode }))
+              }
+              onThinkingChange={(effort) =>
+                setDraftSettings((prev) => ({ ...prev, effort }))
+              }
+              onFastModeChange={(fastMode) =>
+                setDraftSettings((prev) => ({ ...prev, fastMode }))
+              }
+              onPermissionPreset={(permissionRules) =>
+                setDraftSettings((prev) => ({ ...prev, permissionRules }))
+              }
+              filePaths={projectTree?.files}
+              skills={skills}
+              placeholder="Describe what you want to build…"
+            />
+          }
+        />
+        <ProjectPicker
+          open={projectPickerOpen}
+          projects={projects}
+          onOpenChange={setProjectPickerOpen}
+          onSelect={(project) => {
+            setLandingProjectId(project.id)
+            setProjectPickerOpen(false)
+          }}
+          onCreate={() => {
+            setProjectPickerOpen(false)
+            setNewProjectOpen(true)
+          }}
         />
       </div>
     )
@@ -422,10 +635,14 @@ export function SessionPanel() {
     return (
       <div className="flex h-full min-h-0 flex-1 flex-col">
         <DraftHeader draft={draft} agentKind={configuredAgentKind} />
-        <EmptyState
-          title="New session"
-          description="Send a message to start. Nothing is saved until you do."
-        />
+        <div className="grid flex-1 place-items-center px-4 text-center">
+          <div>
+            <p className="text-sm font-medium text-foreground">New session</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Send a message to start. Nothing is saved until you do.
+            </p>
+          </div>
+        </div>
         <SessionComposer
           agentKind={configuredAgentKind}
           loading={createSession.isPending}

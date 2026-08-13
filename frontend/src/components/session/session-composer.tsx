@@ -33,6 +33,7 @@ import {
   MODEL_PROVIDER_ICON,
   MODEL_PROVIDER_LABEL,
 } from "@/lib/orchd"
+import { cn } from "@/lib/utils"
 
 export interface SessionComposerProps {
   agentKind: string
@@ -56,6 +57,8 @@ export interface SessionComposerProps {
   contextUsage?: PromptContextUsage | null
   filePaths?: readonly string[]
   skills?: readonly AgentSkill[]
+  centered?: boolean
+  placeholder?: string
 }
 
 const MODES: PromptOption[] = [
@@ -200,6 +203,8 @@ export function SessionComposer({
   contextUsage,
   filePaths,
   skills = [],
+  centered = false,
+  placeholder,
 }: SessionComposerProps) {
   const [selectedModel, setSelectedModel] = useState<string | undefined>(
     currentModel ?? undefined
@@ -284,8 +289,8 @@ export function SessionComposer({
   }
 
   return (
-    <div className="shrink-0 p-3">
-      <div className="mx-auto max-w-3xl">
+    <div className={cn("shrink-0 p-3", centered && "w-full p-0")}>
+      <div className={cn("mx-auto max-w-3xl", centered && "max-w-2xl")}>
         <PromptInput
           loading={loading}
           disabled={disabled}
@@ -294,9 +299,10 @@ export function SessionComposer({
           minRows={2}
           maxRows={8}
           placeholder={
-            disabled
+            placeholder ??
+            (disabled
               ? "This session is closed"
-              : `Message ${agentLabel(agentKind)}… paste images, @ files, / commands`
+              : `Message ${agentLabel(agentKind)}… paste images, @ files, / commands`)
           }
           actions={[
             { value: "attach", label: "Attach image", icon: <Paperclip /> },
