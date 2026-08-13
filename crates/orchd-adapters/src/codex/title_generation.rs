@@ -22,8 +22,8 @@ pub enum TitleGenerationError {
   Io(#[source] std::io::Error),
   #[error("title-generation subprocess timed out")]
   Timeout,
-  #[error("title-generation subprocess exited with an error")]
-  ModelError,
+  #[error("title-generation subprocess failed: {0}")]
+  ModelError(String),
   #[error("title-generation returned no usable title")]
   NoTitle,
 }
@@ -112,6 +112,59 @@ fn parse_title(output: &[u8]) -> Option<String> {
   sanitize_title(raw.trim())
 }
 
+const TITLE_ERROR_MAX_CHARS: usize = 1_000;
+
+fn compact_diagnostic(text: &str) -> Option<String> {
+  let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+  if text.is_empty() {
+    return None;
+  }
+  let mut text: String = text.chars().take(TITLE_ERROR_MAX_CHARS).collect();
+  if text.chars().count() == TITLE_ERROR_MAX_CHARS {
+    text.push('…');
+  }
+  Some(text)
+}
+
+fn value_message(value: &Value) -> Option<String> {
+  match value {
+    Value::String(text) => {
+      if let Ok(nested) = serde_json::from_str::<Value>(text) {
+        if let Some(message) = value_message(&nested) {
+          return Some(message);
+        }
+      }
+      compact_diagnostic(text)
+    }
+    Value::Object(object) => object
+      .get("message")
+      .and_then(value_message)
+      .or_else(|| object.get("error").and_then(value_message)),
+    _ => None,
+  }
+}
+
+fn extract_error_message(output: &[u8]) -> Option<String> {
+  let mut message = None;
+  for line in String::from_utf8_lossy(output).lines() {
+    let Ok(value) = serde_json::from_str::<Value>(line) else { continue };
+    let candidate = match value.get("type").and_then(Value::as_str) {
+      Some("item.completed") => value
+        .get("item")
+        .filter(|item| item.get("type").and_then(Value::as_str) == Some("error"))
+        .and_then(|item| item.get("message"))
+        .and_then(value_message),
+      Some("error") => value.get("message").and_then(value_message),
+      Some("turn.failed") => value.get("error").and_then(value_message),
+      _ => None,
+    };
+    if candidate.is_some() {
+      message = candidate;
+    }
+  }
+  message
+}
+
 async fn run(
   program: &str,
   cwd: &Path,
@@ -140,24 +193,65 @@ async fn run(
   let (mut process, pipes) =
     ManagedProcess::spawn(&spec).map_err(TitleGenerationError::Spawn)?;
   drop(pipes.stdin);
-  drop(pipes.stderr);
 
   let mut stdout = pipes.stdout;
   let stdout_task = tokio::spawn(async move {
     let mut buf = Vec::new();
     stdout.read_to_end(&mut buf).await.map(|_| buf)
   });
+  let mut stderr = pipes.stderr;
+  let stderr_task = tokio::spawn(async move {
+    let mut buf = Vec::new();
+    stderr.read_to_end(&mut buf).await.map(|_| buf)
+  });
 
   let outcome = tokio::time::timeout(TITLE_GENERATION_TIMEOUT, process.wait()).await;
   let Ok(wait_result) = outcome else {
     let _ = process.kill().await;
+    stdout_task.abort();
+    stderr_task.abort();
     return Err(TitleGenerationError::Timeout);
   };
-  wait_result.map_err(TitleGenerationError::Spawn)?;
+  let status = wait_result.map_err(TitleGenerationError::Spawn)?;
   let stdout_bytes = stdout_task
     .await
-    .map_err(|_| TitleGenerationError::NoTitle)?
+    .map_err(|_| {
+      TitleGenerationError::Io(std::io::Error::other("stdout reader task panicked"))
+    })?
+    .map_err(TitleGenerationError::Io)?;
+  let stderr_bytes = stderr_task
+    .await
+    .map_err(|_| {
+      TitleGenerationError::Io(std::io::Error::other("stderr reader task panicked"))
+    })?
     .map_err(TitleGenerationError::Io)?;
 
+  if let Some(message) = extract_error_message(&stdout_bytes) {
+    return Err(TitleGenerationError::ModelError(message));
+  }
+  if !status.success() {
+    let message = compact_diagnostic(&String::from_utf8_lossy(&stderr_bytes));
+    return Err(TitleGenerationError::ModelError(format!(
+      "{} ({})",
+      message.unwrap_or_else(|| "subprocess exited without a diagnostic".to_string()),
+      status,
+    )));
+  }
+
   parse_title(&stdout_bytes).ok_or(TitleGenerationError::NoTitle)
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn extracts_latest_codex_error_message() {
+    let output = br#"
+{"type":"item.completed","item":{"type":"error","message":"model metadata unavailable"}}
+{"type":"turn.failed","error":{"message":"{\"type\":\"error\",\"message\":\"provider unavailable\"}"}}
+"#;
+
+    assert_eq!(extract_error_message(output).as_deref(), Some("provider unavailable"));
+  }
 }

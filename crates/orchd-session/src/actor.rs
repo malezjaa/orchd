@@ -623,7 +623,7 @@ impl SessionActor {
       let title = match result {
         Ok(title) => Some(title),
         Err(err) => {
-          tracing::warn!(session = %session_id, error = %err, "title generation failed");
+          tracing::error!(session = %session_id, error = %err, "title generation failed");
           None
         }
       };
