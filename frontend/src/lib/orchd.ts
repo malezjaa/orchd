@@ -354,6 +354,12 @@ export interface PolicyRule {
 export type ContentPart =
   | { type: "text"; text: string }
   | { type: "skill"; name: string; path: string | null }
+  | {
+      type: "image"
+      media_type: string
+      data: string
+      name: string | null
+    }
 
 // Plan researches and proposes without making changes. Independent of the
 // policy engine, which gates what's auto-approved, not what's attempted.

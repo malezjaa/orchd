@@ -11,6 +11,9 @@ pub fn extract_text(content: &[ContentPart]) -> String {
     .map(|p| match p {
       ContentPart::Text { text } => text.clone(),
       ContentPart::Skill { name, .. } => format!("/{name}"),
+      ContentPart::Image { name, .. } => {
+        format!("[{}]", name.as_deref().unwrap_or("image"))
+      }
     })
     .collect::<Vec<_>>()
     .join("")

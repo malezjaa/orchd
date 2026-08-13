@@ -272,6 +272,7 @@ export function useSessionState(
         type: "append_user_message",
         id: clientMsgId,
         text: trimmed,
+        content: messageContent,
         ts: new Date().toISOString(),
       })
       dispatch({ type: "set_busy", busy: true })

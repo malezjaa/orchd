@@ -21,12 +21,14 @@ import type {
   ToolResultStatus,
 } from "@/components/agents/tool-result"
 import type { TodoItem } from "@/components/agents/todo-list"
-import type { PermissionKind, PermissionScope } from "@/lib/orchd"
+import type { ContentPart, PermissionKind, PermissionScope } from "@/lib/orchd"
 
 export interface UserMessageEvent {
   id: string
   kind: "user_message"
   text: string
+  copyText?: string
+  content?: ContentPart[]
   ts?: string
 }
 

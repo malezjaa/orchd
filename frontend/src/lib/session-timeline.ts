@@ -72,7 +72,13 @@ export type SessionTimelineAction =
   // `isLive` is false during resume catch-up. Only live text deltas
   // should typewriter-reveal.
   | { type: "apply_event"; event: SessionEvent; isLive: boolean }
-  | { type: "append_user_message"; id: string; text: string; ts: string }
+  | {
+      type: "append_user_message"
+      id: string
+      text: string
+      content: ContentPart[]
+      ts: string
+    }
   | { type: "set_busy"; busy: boolean }
   | {
       type: "set_permission_status"
@@ -105,8 +111,23 @@ function toolResultKind(canonical: ToolRef["canonical"]): ToolResultKind {
 
 function contentPartsToText(content: ContentPart[]): string {
   return content
-    .map((part) => (part.type === "text" ? part.text : `/${part.name}`))
-    .join("\n")
+    .map((part) => {
+      if (part.type === "text") return part.text
+      if (part.type === "skill") return `/${part.name}`
+      return `[${part.name ?? "image"}]`
+    })
+    .join("")
+}
+
+function contentPartsToMarkdown(content: ContentPart[]): string {
+  return content
+    .map((part) => {
+      if (part.type === "text") return part.text
+      if (part.type === "skill") return `/${part.name}`
+      const name = (part.name ?? "image").replaceAll("]", "\\]")
+      return `![${name}](data:${part.media_type};base64,${part.data})`
+    })
+    .join("")
 }
 
 // Thinking is a "working on it" indicator, not a transcript entry, so its
@@ -177,7 +198,9 @@ function applyEvent(
       return upsert(events, event.client_msg_id, () => ({
         id: event.client_msg_id,
         kind: "user_message",
-        text: contentPartsToText(event.content),
+        text: contentPartsToMarkdown(event.content),
+        copyText: contentPartsToText(event.content),
+        content: event.content,
         ts: event.ts,
       }))
 
@@ -365,7 +388,9 @@ export function sessionTimelineReducer(
           {
             id: action.id,
             kind: "user_message",
-            text: action.text,
+            text: contentPartsToMarkdown(action.content),
+            copyText: action.text,
+            content: action.content,
             ts: action.ts,
           },
         ],

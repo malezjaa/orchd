@@ -296,10 +296,10 @@ export function SessionComposer({
           placeholder={
             disabled
               ? "This session is closed"
-              : `Message ${agentLabel(agentKind)}… @ to reference files, / for commands`
+              : `Message ${agentLabel(agentKind)}… paste images, @ files, / commands`
           }
           actions={[
-            { value: "attach", label: "Attach file", icon: <Paperclip /> },
+            { value: "attach", label: "Attach image", icon: <Paperclip /> },
           ]}
           models={onModelChange ? modelOptions : []}
           model={selectedModelId}

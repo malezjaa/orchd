@@ -16,6 +16,15 @@ pub enum ContentPart {
     #[serde(default)]
     path: Option<String>,
   },
+  /// An image pasted or selected in the client. `data` is base64-encoded
+  /// bytes without the data-URL prefix so each adapter can use its native
+  /// image input shape.
+  Image {
+    media_type: String,
+    data: String,
+    #[serde(default)]
+    name: Option<String>,
+  },
 }
 
 /// Placeholder for the auto-approve policy DSL; carried through the command

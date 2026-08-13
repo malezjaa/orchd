@@ -77,7 +77,7 @@ function useStreamedText(text: string, live: boolean): string {
     }
     lastTickRef.current = 0
     frameRef.current = requestAnimationFrame(tick)
-  }, [text])
+  }, [live, text])
 
   useEffect(() => {
     return () => {
@@ -121,7 +121,7 @@ export function TimelineItem({
             </MessageBubbleContent>
           </MessageBubble>
           <MessageFooterStrip
-            copyText={event.text}
+            copyText={event.copyText ?? event.text}
             timestamp={event.ts}
             align="end"
           />

@@ -1,5 +1,15 @@
 import type { AgentSkill, ContentPart } from "@/lib/orchd"
 
+export function promptTextFromContent(content: ContentPart[]): string {
+  return content
+    .map((part) => {
+      if (part.type === "text") return part.text
+      if (part.type === "skill") return `/${part.name}`
+      return `[${part.name ?? "image"}]`
+    })
+    .join("")
+}
+
 const SKILL_TOKEN = /(^|[\s([{])\/([A-Za-z0-9][\w-]*)(?![\w/-])/g
 
 /** Converts the editor's readable `/name` markdown into wire content parts. */

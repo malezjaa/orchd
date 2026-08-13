@@ -2,13 +2,17 @@
 
 import type { ComponentPropsWithoutRef } from "react"
 import { memo, useMemo } from "react"
-import ReactMarkdown, { type Components } from "react-markdown"
+import ReactMarkdown, {
+  defaultUrlTransform,
+  type Components,
+} from "react-markdown"
 import remarkGfm from "remark-gfm"
 import remend from "remend"
 import type { AgentCodeLanguage } from "@/components/agents/agent-code"
 import { CodeBlock } from "@/components/agents/code-block"
 import { ColorSwatch } from "@/components/agents/color-swatch"
 import { FileMention } from "@/components/agents/file-mention"
+import { ImageMention } from "@/components/agents/image-mention"
 import { SkillMention } from "@/components/agents/skill-mention"
 import { parseHexColor } from "@/lib/markdown-color"
 import { parsePathMention } from "@/lib/markdown-path"
@@ -218,7 +222,18 @@ function createComponents(onFileOpen?: (path: string) => void): Components {
   return {
     code: (props) => <InlineCode {...props} onFileOpen={onFileOpen} />,
     pre: PreBlock,
+    img: ({ alt, src, ...props }) => {
+      if (typeof src === "string" && src.startsWith("data:image/")) {
+        return <ImageMention src={src} name={alt || "image"} />
+      }
+      return <img alt={alt} src={src} {...props} />
+    },
   }
+}
+
+function transformMarkdownUrl(url: string, key: string) {
+  if (key === "src" && url.startsWith("data:image/")) return url
+  return defaultUrlTransform(url)
 }
 
 export const AgentMarkdown = memo(function AgentMarkdown({
@@ -238,6 +253,7 @@ export const AgentMarkdown = memo(function AgentMarkdown({
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkFileMentions, remarkSkillMentions]}
         components={components}
+        urlTransform={transformMarkdownUrl}
       >
         {content}
       </ReactMarkdown>

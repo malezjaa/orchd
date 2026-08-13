@@ -11,6 +11,7 @@ import {
   Star,
 } from "lucide-react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
+import { toast } from "sonner"
 import {
   type FormEvent,
   type ReactNode,
@@ -33,7 +34,10 @@ import {
 import { PromptEditor } from "@/components/agents/prompt-editor"
 import { SPRING_SWAP } from "@/lib/ease"
 import type { AgentSkill, ContentPart } from "@/lib/orchd"
-import { promptContentFromMarkdown } from "@/lib/prompt-content"
+import {
+  promptContentFromMarkdown,
+  promptTextFromContent,
+} from "@/lib/prompt-content"
 import { cn } from "@/lib/utils"
 
 export interface PromptContextUsage {
@@ -737,6 +741,8 @@ export function PromptInput({
     defaultThinkingLevel ?? thinkingLevels[0]?.value
   )
   const [actionsOpen, setActionsOpen] = useState(false)
+  const [imagePickerRequest, setImagePickerRequest] = useState(0)
+  const editorContentRef = useRef<ContentPart[] | null>(null)
   const currentValue = value ?? internalValue
   const currentModelValue = model ?? internalModel
   const currentMode = mode ?? internalMode
@@ -775,15 +781,25 @@ export function PromptInput({
     onThinkingLevelChange?.(next)
   }
 
-  const submit = (event?: FormEvent, content?: ContentPart[]) => {
+  const submit = (
+    event?: FormEvent,
+    content?: ContentPart[],
+    promptOverride?: string
+  ) => {
     event?.preventDefault()
-    const prompt = currentValue.trim()
+    const submittedContent = content ?? editorContentRef.current
+    const prompt = (
+      promptOverride ??
+      (submittedContent ? promptTextFromContent(submittedContent) : currentValue)
+    ).trim()
     if (!prompt || disabled || loading) return
 
     void onSubmit?.(
       prompt,
       currentModelValue,
-      content ?? promptContentFromMarkdown(prompt, skills)
+      content ??
+        editorContentRef.current ??
+        promptContentFromMarkdown(prompt, skills)
     )
     if (value === undefined) setInternalValue("")
   }
@@ -800,9 +816,16 @@ export function PromptInput({
       <PromptEditor
         value={currentValue}
         onValueChange={setValue}
-        onSubmit={(content) => submit(undefined, content)}
+        onContentChange={(content) => {
+          editorContentRef.current = content
+        }}
+        onSubmit={(content, promptText) =>
+          submit(undefined, content, promptText)
+        }
         filePaths={filePaths}
         skills={skills}
+        imagePickerRequest={imagePickerRequest}
+        onImageError={(message) => toast.error(message)}
         minRows={minRows}
         maxRows={maxRows}
         placeholder={placeholder}
@@ -846,6 +869,9 @@ export function PromptInput({
                   type="button"
                   disabled={action.disabled}
                   onClick={() => {
+                    if (action.value === "attach") {
+                      setImagePickerRequest((request) => request + 1)
+                    }
                     onAction?.(action.value)
                     setActionsOpen(false)
                   }}

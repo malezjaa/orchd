@@ -10,7 +10,11 @@ import {
   useEditor,
 } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
-import { CornerDownLeft, FileCode2, Sparkles } from "lucide-react"
+import {
+  CornerDownLeft,
+  FileCode2,
+  Sparkles,
+} from "lucide-react"
 import {
   type KeyboardEvent,
   type MouseEvent,
@@ -23,8 +27,12 @@ import {
 import { getFileIcon } from "@/lib/file-icon.tsx"
 import { searchFiles, type RankedFile } from "@/lib/file-search"
 import type { AgentSkill, ContentPart } from "@/lib/orchd"
-import { promptContentFromMarkdown } from "@/lib/prompt-content"
+import {
+  promptContentFromMarkdown,
+  promptTextFromContent,
+} from "@/lib/prompt-content"
 import { cn } from "@/lib/utils"
+import { ImageMention } from "@/components/agents/image-mention"
 import { SkillMention } from "@/components/agents/skill-mention"
 
 interface FileTrigger {
@@ -38,6 +46,8 @@ interface SkillTrigger {
   to: number
   query: string
 }
+
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024
 
 function findFileTrigger(
   value: string,
@@ -230,6 +240,83 @@ const SkillMentionNode = Node.create({
   },
 })
 
+const ImageMentionNode = Node.create({
+  name: "imageMention",
+  group: "inline",
+  inline: true,
+  atom: true,
+  selectable: false,
+  draggable: false,
+
+  addAttributes() {
+    return {
+      mediaType: { default: "image/png" },
+      data: { default: "" },
+      name: { default: "image" },
+    }
+  },
+
+  parseHTML() {
+    return [{ tag: "span[data-image-mention]" }]
+  },
+
+  renderHTML({ node, HTMLAttributes }) {
+    return [
+      "span",
+      mergeAttributes(HTMLAttributes, {
+        "data-image-mention": "",
+        "data-image-name": node.attrs.name,
+      }),
+      `[${node.attrs.name}]`,
+    ]
+  },
+
+  renderText({ node }) {
+    return `[${node.attrs.name}]`
+  },
+
+  parseMarkdown(token, helpers) {
+    return helpers.createNode("imageMention", {
+      mediaType: token.mediaType ?? "image/png",
+      data: token.data ?? "",
+      name: token.name ?? "image",
+    })
+  },
+
+  markdownTokenizer: {
+    name: "imageMention",
+    level: "inline" as const,
+    start(source: string) {
+      const match = /(?:^|[\s([{])(!\[[^\]]*\]\(data:[^)]+\))/.exec(source)
+      return match ? match.index + match[0].length - match[1].length : -1
+    },
+    tokenize(source: string) {
+      const match = /^!\[([^\]]*)\]\(data:([^;]+);base64,([^)]*)\)/.exec(
+        source
+      )
+      if (!match) return undefined
+      return {
+        type: "imageMention",
+        raw: match[0],
+        name: match[1] || "image",
+        mediaType: match[2],
+        data: match[3],
+      }
+    },
+  },
+
+  renderMarkdown(node) {
+    const name = String(node.attrs?.name ?? "image").replaceAll("]", "\\]")
+    const mediaType = String(node.attrs?.mediaType ?? "image/png")
+    const data = String(node.attrs?.data ?? "")
+    return `![${name}](data:${mediaType};base64,${data})`
+  },
+
+  addNodeView() {
+    return ReactNodeViewRenderer(ImageMentionView)
+  },
+})
+
 function FileMentionView({ node }: NodeViewProps) {
   const path = String(node.attrs.path ?? "")
   const Icon = getFileIcon(path)
@@ -262,6 +349,19 @@ function SkillMentionView({ node }: NodeViewProps) {
   return (
     <NodeViewWrapper as="span" contentEditable={false}>
       <SkillMention name={String(node.attrs.name ?? "")} />
+    </NodeViewWrapper>
+  )
+}
+
+function ImageMentionView({ node }: NodeViewProps) {
+  const name = String(node.attrs.name ?? "image")
+  const mediaType = String(node.attrs.mediaType ?? "image/png")
+  const data = String(node.attrs.data ?? "")
+  const src = data ? `data:${mediaType};base64,${data}` : undefined
+
+  return (
+    <NodeViewWrapper as="span" contentEditable={false}>
+      <ImageMention src={src ?? ""} name={name} />
     </NodeViewWrapper>
   )
 }
@@ -416,7 +516,10 @@ function SkillSearchMenu({
 export interface PromptEditorProps {
   value: string
   onValueChange: (value: string) => void
-  onSubmit: (content: ContentPart[]) => void
+  onSubmit: (content: ContentPart[], promptText: string) => void
+  onContentChange?: (content: ContentPart[]) => void
+  imagePickerRequest?: number
+  onImageError?: (message: string) => void
   filePaths: readonly string[]
   skills: readonly AgentSkill[]
   minRows: number
@@ -437,6 +540,9 @@ export function PromptEditor({
   placeholder,
   ariaLabel,
   disabled = false,
+  onContentChange,
+  imagePickerRequest = 0,
+  onImageError,
 }: PromptEditorProps) {
   const onValueChangeRef = useRef(onValueChange)
   const [, setEditorVersion] = useState(0)
@@ -448,12 +554,70 @@ export function PromptEditor({
   const [dismissedSkillTrigger, setDismissedSkillTrigger] = useState<
     string | null
   >(null)
+  const editorRef = useRef<Editor | null>(null)
+  const imageInputRef = useRef<HTMLInputElement>(null)
+  const lastImagePickerRequest = useRef(imagePickerRequest)
+  const onContentChangeRef = useRef(onContentChange)
+  const onImageErrorRef = useRef(onImageError)
 
   onValueChangeRef.current = onValueChange
+  onContentChangeRef.current = onContentChange
+  onImageErrorRef.current = onImageError
+
+  const imageDataUrl = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => {
+        if (typeof reader.result === "string") resolve(reader.result)
+        else reject(new Error(`could not read ${file.name}`))
+      }
+      reader.onerror = () => reject(new Error(`could not read ${file.name}`))
+      reader.readAsDataURL(file)
+    })
+
+  const insertImages = async (files: File[]) => {
+    const editor = editorRef.current
+    if (!editor || disabled) return
+    const imageFiles = files.filter((file) => file.type.startsWith("image/"))
+    if (!imageFiles.length) return
+    const position = editor.state.selection.from
+    const nodes = []
+    for (const file of imageFiles) {
+      if (file.size > MAX_IMAGE_BYTES) {
+        onImageErrorRef.current?.(`${file.name} is larger than 10 MB`)
+        continue
+      }
+      try {
+        const dataUrl = await imageDataUrl(file)
+        const comma = dataUrl.indexOf(",")
+        if (comma === -1) throw new Error("image data is invalid")
+        nodes.push(
+          {
+            type: "imageMention",
+            attrs: {
+              mediaType: file.type,
+              data: dataUrl.slice(comma + 1),
+              name: file.name || "image",
+            },
+          },
+          { type: "text", text: " " }
+        )
+      } catch {
+        onImageErrorRef.current?.(`Could not read ${file.name}`)
+      }
+    }
+    if (nodes.length) editor.chain().focus().insertContentAt(position, nodes).run()
+  }
 
   const editor = useEditor(
     {
-      extensions: [StarterKit, FileMentionNode, SkillMentionNode, Markdown],
+      extensions: [
+        StarterKit,
+        FileMentionNode,
+        SkillMentionNode,
+        ImageMentionNode,
+        Markdown,
+      ],
       content: value,
       contentType: "markdown",
       editable: !disabled,
@@ -469,6 +633,19 @@ export function PromptEditor({
           role: "textbox",
           spellcheck: "false",
         },
+        handlePaste: (_view, event) => {
+          const files = Array.from(event.clipboardData?.items ?? [])
+            .filter(
+              (item) =>
+                item.kind === "file" && item.type.startsWith("image/")
+            )
+            .map((item) => item.getAsFile())
+            .filter((file): file is File => file !== null)
+          if (!files.length) return false
+          event.preventDefault()
+          void insertImages(files)
+          return true
+        },
       },
     },
     []
@@ -479,7 +656,9 @@ export function PromptEditor({
 
     const refresh = () => setEditorVersion((version) => version + 1)
     const updateValue = () => {
+      const content = promptContentFromEditor(editor, skills)
       onValueChangeRef.current(editor.getMarkdown())
+      onContentChangeRef.current?.(content)
       refresh()
     }
 
@@ -489,7 +668,20 @@ export function PromptEditor({
       editor.off("update", updateValue)
       editor.off("selectionUpdate", refresh)
     }
+  }, [editor, skills])
+
+  useEffect(() => {
+    editorRef.current = editor
+    return () => {
+      editorRef.current = null
+    }
   }, [editor])
+
+  useEffect(() => {
+    if (imagePickerRequest === lastImagePickerRequest.current) return
+    lastImagePickerRequest.current = imagePickerRequest
+    imageInputRef.current?.click()
+  }, [imagePickerRequest])
 
   useEffect(() => {
     if (!editor) return
@@ -670,9 +862,8 @@ export function PromptEditor({
     ) {
       event.preventDefault()
       event.stopPropagation()
-      onSubmit(
-        promptContentFromMarkdown(editor?.getMarkdown() ?? value, skills)
-      )
+      const content = promptContentFromEditor(editor, skills)
+      onSubmit(content, promptTextFromContent(content))
     }
   }
 
@@ -709,6 +900,56 @@ export function PromptEditor({
           maxHeight: `${maxRows * 24}px`,
         }}
       />
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        tabIndex={-1}
+        onChange={(event) => {
+          void insertImages(Array.from(event.target.files ?? []))
+          event.target.value = ""
+        }}
+      />
     </div>
   )
+}
+
+function promptContentFromEditor(
+  editor: Editor | null,
+  skills: readonly AgentSkill[]
+): ContentPart[] {
+  if (!editor) return promptContentFromMarkdown("", skills)
+  const parts: ContentPart[] = []
+  const appendText = (text: string) => {
+    if (!text) return
+    const last = parts.at(-1)
+    if (last?.type === "text") last.text += text
+    else parts.push({ type: "text", text })
+  }
+  editor.state.doc.forEach((block, _offset, index) => {
+    if (index > 0) appendText("\n")
+    block.forEach((node) => {
+      if (node.type.name === "text") appendText(node.text ?? "")
+      else if (node.type.name === "hardBreak") appendText("\n")
+      else if (node.type.name === "fileMention")
+        appendText(`@${node.attrs.path}`)
+      else if (node.type.name === "skillMention") {
+        parts.push({
+          type: "skill",
+          name: node.attrs.name,
+          path: node.attrs.path ?? null,
+        })
+      } else if (node.type.name === "imageMention") {
+        parts.push({
+          type: "image",
+          media_type: node.attrs.mediaType,
+          data: node.attrs.data,
+          name: node.attrs.name || null,
+        })
+      }
+    })
+  })
+  return parts.length ? parts : [{ type: "text", text: "" }]
 }

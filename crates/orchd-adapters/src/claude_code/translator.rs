@@ -464,19 +464,28 @@ impl Translator for ClaudeCodeTranslator {
     match cmd {
       SessionCommand::UserMessage { content, .. } => {
         self.interrupt_requested = false;
-        let text = content
+        let content = content
           .iter()
-          .map(|p| match p {
-            ContentPart::Text { text } => text.clone(),
+          .map(|part| match part {
+            ContentPart::Text { text } => json!({ "type": "text", "text": text }),
             // Claude Code resolves user-invocable skills from `/name`.
             // Keep the product syntax intact for its stream-json input.
-            ContentPart::Skill { name, .. } => format!("/{name}"),
+            ContentPart::Skill { name, .. } => {
+              json!({ "type": "text", "text": format!("/{name}") })
+            }
+            ContentPart::Image { media_type, data, .. } => json!({
+              "type": "image",
+              "source": {
+                "type": "base64",
+                "media_type": media_type,
+                "data": data,
+              }
+            }),
           })
-          .collect::<Vec<_>>()
-          .join("");
+          .collect::<Vec<_>>();
         let frame = json!({
             "type": "user",
-            "message": { "role": "user", "content": [{ "type": "text", "text": text }] },
+            "message": { "role": "user", "content": content },
         });
         Ok(vec![Frame::from_json(&frame)?])
       }

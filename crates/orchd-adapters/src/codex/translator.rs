@@ -148,25 +148,39 @@ impl CodexTranslator {
       return Ok(());
     };
 
-    let text = content
+    let skills = content
       .iter()
-      .map(|part| match part {
-        ContentPart::Text { text } => text.clone(),
+      .filter_map(|part| match part {
+        ContentPart::Skill { name, path: Some(path) } => Some(json!({
+          "type": "skill",
+          "name": name,
+          "path": path,
+        })),
+        _ => None,
+      })
+      .collect::<Vec<_>>();
+    let mut input = Vec::new();
+    let mut text = String::new();
+    for part in content {
+      match part {
+        ContentPart::Text { text: value } => text.push_str(&value),
         // Codex's native skill marker is `$name`. The structured item below
         // gives the app-server the skill file path when the UI discovered it.
-        ContentPart::Skill { name, .. } => format!("${name}"),
-      })
-      .collect::<Vec<_>>()
-      .join("");
-    let skills = content.iter().filter_map(|part| match part {
-      ContentPart::Skill { name, path: Some(path) } => Some(json!({
-        "type": "skill",
-        "name": name,
-        "path": path,
-      })),
-      _ => None,
-    });
-    let mut input = vec![json!({ "type": "text", "text": text })];
+        ContentPart::Skill { name, .. } => text.push_str(&format!("${name}")),
+        ContentPart::Image { media_type, data, .. } => {
+          if !text.is_empty() {
+            input.push(json!({ "type": "text", "text": std::mem::take(&mut text) }));
+          }
+          input.push(json!({
+            "type": "image",
+            "url": format!("data:{media_type};base64,{data}"),
+          }));
+        }
+      }
+    }
+    if !text.is_empty() || input.is_empty() {
+      input.push(json!({ "type": "text", "text": text }));
+    }
     input.extend(skills);
 
     let mut params = json!({
