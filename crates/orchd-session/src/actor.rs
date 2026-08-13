@@ -1,5 +1,5 @@
 use std::{
-  collections::{HashMap, VecDeque},
+  collections::HashMap,
   path::{Path, PathBuf},
   sync::{Arc, atomic::AtomicBool},
   time::{Duration, Instant},
@@ -21,14 +21,12 @@ use tokio::{
   sync::{broadcast, mpsc},
   task::JoinHandle,
 };
-use uuid::Uuid;
 
 use crate::{
   config::{ActorConfig, IdleAction},
   echo::{chunk_words, extract_text},
+  lifecycle::{SessionLifecycle, SessionTranscript},
 };
-
-const DEDUP_WINDOW: usize = 256;
 
 const COMPACTION_THRESHOLD: u64 = 300;
 /// Events within this many seq numbers of the live edge are never compacted,
@@ -55,9 +53,9 @@ enum AttemptOutcome {
   Crashed,
 }
 
-/// The single writer for one session: owns the agent, assigns the seq counter,
-/// and enforces "persist before publish" so the durable log is always at least
-/// as far along as what any client has seen.
+/// The single writer for one session: owns the agent and routes execution
+/// through the lifecycle and transcript modules so durable state stays ahead
+/// of live subscribers.
 pub struct SessionActor {
   id: SessionId,
   agent_kind: AgentKind,
@@ -67,13 +65,8 @@ pub struct SessionActor {
   /// A sender into this actor's own `cmd_rx`, so background tasks can route
   /// work back through the normal command path.
   self_tx: mpsc::Sender<SessionCommand>,
-  events_tx: broadcast::Sender<SessionEvent>,
-  next_seq: u64,
-  seen_client_msgs: VecDeque<Uuid>,
-  /// The turn all decoded agent events are sealed under. Translators don't
-  /// track turn grouping, so the actor rotates this on every `UserMessage`
-  /// and stamps it onto whatever the translator decodes until the next one.
-  current_turn: TurnId,
+  transcript: SessionTranscript,
+  lifecycle: SessionLifecycle,
   policy: PolicyEngine,
   pending_approvals: HashMap<ApprovalId, PendingApproval>,
   config: ActorConfig,
@@ -89,13 +82,6 @@ pub struct SessionActor {
   /// Consecutive failed spawn/run attempts since the agent last came up
   /// cleanly. Bounds crash-recovery retries.
   retry_count: u32,
-  /// A `UserMessage` was sent but no `TurnCompleted` has come back yet, so a
-  /// crash mid-turn can emit a synthetic one instead of leaving a client's UI
-  /// stuck on an open block.
-  turn_in_flight: bool,
-  /// Shared with the `SessionHandle` so the API layer can read busyness
-  /// without a command round-trip.
-  busy: Arc<AtomicBool>,
   stopped: Arc<tokio::sync::Notify>,
   last_activity: Instant,
   /// The highest seq already folded by `maybe_compact`.
@@ -127,13 +113,11 @@ impl SessionActor {
       id,
       agent_kind,
       cwd,
-      store,
+      store: store.clone(),
       cmd_rx,
       self_tx,
-      events_tx,
-      next_seq,
-      seen_client_msgs: VecDeque::with_capacity(DEDUP_WINDOW),
-      current_turn: TurnId::new(),
+      transcript: SessionTranscript::new(id, store.clone(), events_tx.clone(), next_seq),
+      lifecycle: SessionLifecycle::new(busy),
       policy: PolicyEngine::with_rules(PolicyModes::default(), rules),
       pending_approvals: HashMap::new(),
       config,
@@ -141,19 +125,10 @@ impl SessionActor {
       current_title: initial_title,
       title_generation_epoch: 0,
       retry_count: 0,
-      turn_in_flight: false,
-      busy,
       stopped,
       last_activity: Instant::now(),
       compacted_up_to: 0,
     })
-  }
-
-  /// The only place `turn_in_flight` and the shared `busy` flag should be
-  /// assigned, so they stay in lockstep.
-  fn set_turn_in_flight(&mut self, value: bool) {
-    self.turn_in_flight = value;
-    self.busy.store(value, std::sync::atomic::Ordering::Relaxed);
   }
 
   pub async fn run(self) {
@@ -232,30 +207,23 @@ impl SessionActor {
   async fn handle_echo_command(&mut self, cmd: SessionCommand) -> bool {
     match cmd {
       SessionCommand::UserMessage { client_msg_id, content } => {
-        if !self.dedup(client_msg_id) {
+        let Some(turn) = self.lifecycle.start_turn(client_msg_id) else {
           tracing::debug!(session=%self.id, %client_msg_id, "duplicate user message ignored");
           return false;
-        }
-        let turn = TurnId::new();
+        };
         self
           .emit(
             EventPayload::UserMessage { client_msg_id, content: content.clone() },
             turn,
           )
           .await;
-        self.echo_turn(&content).await;
+        self.echo_turn(&content, turn).await;
         false
       }
       SessionCommand::Interrupt => {
-        self
-          .emit(
-            EventPayload::TurnCompleted {
-              turn: TurnId::new(),
-              stop_reason: StopReason::Interrupted,
-            },
-            TurnId::new(),
-          )
-          .await;
+        if let Some((turn, payload)) = self.lifecycle.interrupt_turn() {
+          self.emit(payload, turn).await;
+        }
         false
       }
       // The echo adapter has no policy engine, no approvals, and nothing
@@ -280,8 +248,7 @@ impl SessionActor {
     }
   }
 
-  async fn echo_turn(&mut self, content: &[orchd_core::ContentPart]) {
-    let turn = TurnId::new();
+  async fn echo_turn(&mut self, content: &[orchd_core::ContentPart], turn: TurnId) {
     let block = BlockId::new();
     let text = extract_text(content);
 
@@ -299,7 +266,7 @@ impl SessionActor {
 
   async fn run_unsupported(mut self) {
     tracing::error!(session = %self.id, agent = ?self.agent_kind, "no adapter registered for this agent kind");
-    let turn = self.current_turn;
+    let turn = self.lifecycle.current_turn();
     self
       .emit(
         EventPayload::Error {
@@ -399,7 +366,7 @@ impl SessionActor {
       Ok(pair) => pair,
       Err(err) => {
         tracing::error!(session = %self.id, error = %err, "failed to spawn agent process");
-        let turn = self.current_turn;
+        let turn = self.lifecycle.current_turn();
         self
           .emit(
             EventPayload::Error {
@@ -684,7 +651,7 @@ impl SessionActor {
     if let Err(err) = self.store.set_title(self.id, &title).await {
       tracing::error!(session = %self.id, error = %err, "failed to persist session title");
     }
-    let turn = self.current_turn;
+    let turn = self.lifecycle.current_turn();
     self.emit(EventPayload::TitleUpdated { title }, turn).await;
   }
 
@@ -706,19 +673,18 @@ impl SessionActor {
       // that led here is over.
       EventPayload::SessionInit { .. } => {
         self.retry_count = 0;
-        let turn = self.current_turn;
+        let turn = self.lifecycle.current_turn();
         self.emit(payload, turn).await;
       }
       // The translator fills `TurnCompleted.turn` with a placeholder, since it
       // doesn't track turn grouping; overwrite it before sealing.
       EventPayload::TurnCompleted { stop_reason, .. } => {
-        let turn = self.current_turn;
-        self.set_turn_in_flight(false);
-        self.emit(EventPayload::TurnCompleted { turn, stop_reason }, turn).await;
+        let (turn, completion) = self.lifecycle.complete_turn(stop_reason);
+        self.emit(completion, turn).await;
         self.maybe_compact().await;
       }
       other => {
-        let turn = self.current_turn;
+        let turn = self.lifecycle.current_turn();
         self.emit(other, turn).await;
       }
     }
@@ -734,14 +700,11 @@ impl SessionActor {
   ) -> bool {
     match &cmd {
       SessionCommand::UserMessage { client_msg_id, content } => {
-        if !self.dedup(*client_msg_id) {
+        let Some(turn) = self.lifecycle.start_turn(*client_msg_id) else {
           tracing::debug!(session=%self.id, %client_msg_id, "duplicate user message ignored");
           return false;
-        }
+        };
         self.apply_first_message_title(content).await;
-        self.current_turn = TurnId::new();
-        self.set_turn_in_flight(true);
-        let turn = self.current_turn;
         self
           .emit(
             EventPayload::UserMessage {
@@ -842,7 +805,7 @@ impl SessionActor {
           tracing::error!(session = %self.id, error = %err, "failed to persist pending approval");
         }
 
-        let turn = self.current_turn;
+        let turn = self.lifecycle.current_turn();
         self.emit(EventPayload::PermissionRequested(req.clone()), turn).await;
 
         let remaining = req.expires_at - OffsetDateTime::now_utc();
@@ -932,7 +895,7 @@ impl SessionActor {
       tracing::error!(session = %self.id, error = %err, "failed to persist approval resolution");
     }
 
-    let turn = self.current_turn;
+    let turn = self.lifecycle.current_turn();
     self
       .emit(
         EventPayload::PermissionResolved { request_id: req.request_id, decision },
@@ -957,7 +920,7 @@ impl SessionActor {
     &mut self,
     status: Result<std::process::ExitStatus, orchd_proc::ProcError>,
   ) {
-    let turn = self.current_turn;
+    let turn = self.lifecycle.current_turn();
     match status {
       Ok(status) => {
         tracing::warn!(session = %self.id, %status, "agent process exited unexpectedly");
@@ -989,14 +952,8 @@ impl SessionActor {
       }
     }
 
-    if self.turn_in_flight {
-      self.set_turn_in_flight(false);
-      self
-        .emit(
-          EventPayload::TurnCompleted { turn, stop_reason: StopReason::Interrupted },
-          turn,
-        )
-        .await;
+    if let Some((turn, completion)) = self.lifecycle.interrupt_turn() {
+      self.emit(completion, turn).await;
     }
   }
 
@@ -1033,12 +990,12 @@ impl SessionActor {
   /// accumulated. Called at turn boundaries only; compaction is housekeeping,
   /// not something that needs to run per-delta.
   async fn maybe_compact(&mut self) {
-    if self.next_seq.saturating_sub(self.compacted_up_to)
+    if self.transcript.next_seq().saturating_sub(self.compacted_up_to)
       < COMPACTION_THRESHOLD + COMPACTION_TAIL
     {
       return;
     }
-    let before_seq = self.next_seq - COMPACTION_TAIL;
+    let before_seq = self.transcript.next_seq() - COMPACTION_TAIL;
     match self.store.compact_events(self.id, before_seq).await {
       Ok(removed) => {
         if removed > 0 {
@@ -1075,43 +1032,11 @@ impl SessionActor {
     }
   }
 
-  /// Returns `false` if `client_msg_id` was already seen (a retry after a
-  /// dropped connection), meaning the command must be dropped rather than
-  /// re-executed.
-  fn dedup(&mut self, client_msg_id: Uuid) -> bool {
-    if self.seen_client_msgs.contains(&client_msg_id) {
-      return false;
-    }
-    if self.seen_client_msgs.len() >= DEDUP_WINDOW {
-      self.seen_client_msgs.pop_front();
-    }
-    self.seen_client_msgs.push_back(client_msg_id);
-    true
-  }
-
-  /// Persist before publish: the append-only log is sealed as durable truth
-  /// first; the broadcast to live subscribers is a lossy convenience on top.
+  /// Touch activity before passing the event to the transcript module. The
+  /// transcript then enforces persist-before-publish.
   async fn emit(&mut self, payload: EventPayload, turn: TurnId) {
-    let seq = self.next_seq;
-    self.next_seq += 1;
     self.last_activity = Instant::now();
-
-    let event = SessionEvent {
-      session_id: self.id,
-      seq,
-      ts: OffsetDateTime::now_utc(),
-      turn,
-      payload,
-    };
-
-    if let Err(err) = self.store.append_event(&event).await {
-      tracing::error!(session = %self.id, seq, error = %err, "failed to persist event");
-      return;
-    }
-
-    // An error here just means no live subscribers: the log has it, and a
-    // reconnecting client will replay.
-    let _ = self.events_tx.send(event);
+    self.transcript.append(payload, turn).await;
   }
 }
 
