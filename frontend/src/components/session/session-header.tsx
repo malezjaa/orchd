@@ -1,4 +1,5 @@
 import { PanelLeft } from "lucide-react"
+import { LoadingState } from "@/components/agents/loading-states/loading-state"
 import { AnimatedSidebarTrigger } from "@/components/motion/animated-sidebar"
 import { Loader } from "@/components/motion/loader"
 import { SessionMenu } from "@/components/session/session-menu"
@@ -35,6 +36,15 @@ export function SessionHeader({
       <AnimatedSidebarTrigger className="text-muted-foreground hover:bg-muted hover:text-foreground">
         <PanelLeft className="size-4" />
       </AnimatedSidebarTrigger>
+      {busy ? (
+        <LoadingState
+          label="Working"
+          variant="Orbit"
+          compact
+          startedAt={session.turnStartedAt ?? undefined}
+          className="shrink-0 text-muted-foreground"
+        />
+      ) : null}
       <div className="group/title flex min-w-0 flex-1 items-center gap-1.5">
         <div className="min-w-0 flex-1">
           {titleRegenerating ? (
@@ -75,14 +85,6 @@ export function SessionHeader({
           regenerating={titleRegenerating}
         />
       </div>
-      {busy ? (
-        <Loader
-          variant="dots"
-          size={16}
-          label="Agent working"
-          className="text-muted-foreground"
-        />
-      ) : null}
     </header>
   )
 }

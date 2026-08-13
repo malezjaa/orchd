@@ -8,7 +8,7 @@ import {
   SquarePen,
 } from "lucide-react"
 import { useMemo, useState } from "react"
-import { WorkingIndicator } from "@/components/agents/loading-states/working-indicator"
+import { LoadingState } from "@/components/agents/loading-states/loading-state"
 import {
   AnimatedSidebarGroup,
   AnimatedSidebarGroupContent,
@@ -64,14 +64,14 @@ function matchesQuery(session: SessionRecord, query: string) {
 
 function SessionWorkingStatus({ session }: { session: SessionRecord }) {
   return (
-    <WorkingIndicator
+    <LoadingState
+      label={session.titleRegenerating ? "Updating title" : "Working"}
+      variant="Orbit"
       startedAt={
         session.busy ? (session.turnStartedAt ?? undefined) : undefined
       }
       className="text-[11px] text-muted-foreground/70"
-    >
-      {session.titleRegenerating ? "Updating title" : "Working"}
-    </WorkingIndicator>
+    />
   )
 }
 
@@ -226,6 +226,7 @@ export function SessionList({
                   <AnimatedSidebarMenuSub open={expanded}>
                     {projectSessions.map((session) => {
                       const Icon = agentIcon(session.agent_kind)
+                      const working = session.busy || session.titleRegenerating
                       return (
                         <AnimatedSidebarMenuSubItem
                           key={session.id}
@@ -236,7 +237,7 @@ export function SessionList({
                             isActive={session.id === activeId}
                             onSelect={() => onSelect(session.id)}
                             meta={
-                              session.busy || session.titleRegenerating ? (
+                              working ? (
                                 <SessionWorkingStatus session={session} />
                               ) : null
                             }
@@ -260,6 +261,7 @@ export function SessionList({
 
             {ungrouped.map((session) => {
               const Icon = agentIcon(session.agent_kind)
+              const working = session.busy || session.titleRegenerating
               return (
                 <AnimatedSidebarMenuItem
                   key={session.id}
@@ -270,7 +272,7 @@ export function SessionList({
                     isActive={session.id === activeId}
                     onSelect={() => onSelect(session.id)}
                     meta={
-                      session.busy || session.titleRegenerating ? (
+                      working ? (
                         <SessionWorkingStatus session={session} />
                       ) : null
                     }
