@@ -6,6 +6,7 @@ import type {
   AgentKind,
   FileContentsResponse,
   ProjectRecord,
+  ProcessInventory,
   SessionRecord,
   SettingsPatch,
   SettingsRecord,
@@ -140,6 +141,17 @@ export function useSessions() {
     // Catches status changes with no live socket open, such as a session
     // closed from another device.
     refetchInterval: 20_000,
+  })
+}
+
+export function useSessionProcesses(sessionId: string | null) {
+  const token = useAuthToken()
+  return useQuery<ProcessInventory>({
+    queryKey: ["session-processes", sessionId ?? "__none__"],
+    queryFn: () => api.listSessionProcesses(sessionId as string),
+    enabled: token !== null && Boolean(sessionId),
+    refetchInterval: 500,
+    staleTime: 250,
   })
 }
 

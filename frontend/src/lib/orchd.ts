@@ -57,6 +57,28 @@ export interface SessionRecord {
   turnStartedAt?: string | null
 }
 
+export type ProcessStatus = "running" | "sleeping" | "stopped" | "zombie" | "unknown"
+
+export interface ProcessRecord {
+  pid: number
+  ppid: number
+  pgid: number
+  name: string
+  path: string | null
+  executable: string | null
+  command: string | null
+  status: ProcessStatus
+  state: string
+  memory_bytes: number | null
+  cpu_time_ticks: number
+  is_group_leader: boolean
+}
+
+export interface ProcessInventory {
+  processes: ProcessRecord[]
+  session_busy: boolean
+}
+
 export function basename(path: string): string {
   return path.replace(/\/+$/, "").split("/").pop() || path
 }

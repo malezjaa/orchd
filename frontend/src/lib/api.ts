@@ -13,6 +13,7 @@ import type {
   GitStatusResponse,
   ModelInfo,
   ProjectRecord,
+  ProcessInventory,
   SessionRecord,
   SettingsPatch,
   SettingsRecord,
@@ -93,6 +94,9 @@ export const api = {
     request<SessionRecord[]>("/sessions?archived=true"),
 
   getSession: (id: string) => request<SessionRecord>(`/sessions/${id}`),
+
+  listSessionProcesses: (id: string) =>
+    request<ProcessInventory>(`/sessions/${id}/processes`),
 
   archiveSession: (id: string) =>
     request<void>(`/sessions/${id}/archive`, { method: "POST" }),

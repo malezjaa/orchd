@@ -2,6 +2,7 @@ mod auth;
 mod error;
 mod file_tree;
 mod http;
+mod processes;
 mod state;
 mod terminal;
 mod ws;

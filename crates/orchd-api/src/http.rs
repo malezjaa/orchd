@@ -15,6 +15,7 @@ use crate::{
   file_tree::{
     browse_fs, file_contents, file_tree, git_status_response, write_file_contents,
   },
+  processes::{self, ProcessInventory},
   state::AppState,
 };
 
@@ -29,6 +30,7 @@ pub fn router() -> Router<AppState> {
       get(get_session).delete(delete_session).patch(rename_session),
     )
     .route("/sessions/{id}/archive", post(archive_session))
+    .route("/sessions/{id}/processes", get(list_processes))
     .route("/sessions/{id}/unarchive", post(unarchive_session))
     .route("/sessions/{id}/pin", post(pin_session))
     .route("/sessions/{id}/unpin", post(unpin_session))
@@ -311,6 +313,19 @@ async fn get_session(
     SessionId::from_str(&id).map_err(|_| ApiError::bad_request("invalid session id"))?;
   let record = state.registry.get_record(id).await?;
   Ok(Json(SessionResponse::from(&state, record)))
+}
+
+async fn list_processes(
+  State(state): State<AppState>,
+  Path(id): Path<String>,
+) -> Result<Json<ProcessInventory>, ApiError> {
+  let id =
+    SessionId::from_str(&id).map_err(|_| ApiError::bad_request("invalid session id"))?;
+  let record = state.registry.get_record(id).await?;
+  Ok(Json(ProcessInventory {
+    processes: processes::list_processes(record.pgid),
+    session_busy: state.registry.is_busy(id),
+  }))
 }
 
 async fn archive_session(

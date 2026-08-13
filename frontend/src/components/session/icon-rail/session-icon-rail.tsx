@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
-import { GitBranch, Loader2, SquareTerminal } from "lucide-react"
+import { Cpu, GitBranch, Loader2, SquareTerminal } from "lucide-react"
 import { TooltipIcon } from "@/components/tooltip-icon.tsx"
 import { EASE_DRAWER } from "@/lib/ease.ts"
 import { cn } from "@/lib/utils.ts"
 import { GitPanel } from "./git-panel.tsx"
+import { ProcessesPanel } from "./processes-panel.tsx"
 import { TerminalPanel } from "./terminal-panel.tsx"
 
 function GithubIcon({ className }: { className?: string }) {
@@ -66,6 +67,13 @@ const RAIL_ACTIONS: RailAction[] = [
     icon: (p) => <SquareTerminal className={p.className} />,
     render: (sessionId) =>
       sessionId ? <TerminalPanel sessionId={sessionId} /> : null,
+  },
+  {
+    id: "processes",
+    label: "Processes",
+    icon: (p) => <Cpu className={p.className} />,
+    render: (sessionId) =>
+      sessionId ? <ProcessesPanel sessionId={sessionId} /> : null,
   },
 ]
 
