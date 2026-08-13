@@ -31,8 +31,9 @@ pub enum AgentMode {
   Plan,
 }
 
-/// Extended-thinking depth, in Claude Code's own vocabulary (`--effort`;
-/// the installed CLI, 2.1.224, accepts exactly these five values).
+/// Extended-thinking depth. Adapters forward the selected value using the
+/// vocabulary advertised by the selected model. Claude Code currently uses
+/// the first five values; Codex also advertises `ultra` for some models.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ThinkingEffort {
@@ -41,6 +42,7 @@ pub enum ThinkingEffort {
   High,
   Xhigh,
   Max,
+  Ultra,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -72,6 +74,10 @@ pub enum SessionCommand {
   SetModel {
     model: Option<String>,
     effort: Option<ThinkingEffort>,
+    /// Codex Fast mode. `None` leaves the current service-tier preference
+    /// unchanged, while `Some(false)` explicitly requests standard speed.
+    #[serde(default)]
+    fast_mode: Option<bool>,
   },
   Close {
     reason: crate::event::CloseReason,

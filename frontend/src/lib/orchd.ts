@@ -10,7 +10,7 @@ import { OpenAiLogo } from "@/components/icons/openai-logo"
 
 export type AgentKind = "claude_code" | "codex"
 
-export const DISABLED_AGENT_KINDS: readonly AgentKind[] = ["codex"]
+export const DISABLED_AGENT_KINDS: readonly AgentKind[] = []
 
 export type SessionStatus =
   | "creating"
@@ -137,12 +137,17 @@ export interface ModelInfo {
   provider: ModelProvider
   context_window: number
   max_output_tokens: number
+  supported_reasoning_efforts: ThinkingEffort[]
+  default_reasoning_effort: ThinkingEffort
+  supports_fast_mode: boolean
 }
 
 // Mirrors `claude_code::DEFAULT_MODEL`, the model a new session actually
 // launches with. Seeds the draft composer before a live session reports
 // its own, so the picker doesn't show the catalog's first entry instead.
 export const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5"
+// Mirrors the default model reported by the installed Codex app-server.
+export const DEFAULT_CODEX_MODEL = "gpt-5.6-sol"
 
 export const MODEL_PROVIDER_LABEL: Record<ModelProvider, string> = {
   anthropic: "Anthropic",
@@ -268,8 +273,15 @@ export type ContentPart = { type: "text"; text: string }
 // policy engine, which gates what's auto-approved, not what's attempted.
 export type AgentMode = "build" | "plan"
 
-// Extended-thinking depth, in Claude Code's own `--effort` vocabulary.
-export type ThinkingEffort = "low" | "medium" | "high" | "xhigh" | "max"
+// Model-advertised reasoning effort. Codex currently adds `ultra` for some
+// models; Claude Code currently uses the first five values.
+export type ThinkingEffort =
+  | "low"
+  | "medium"
+  | "high"
+  | "xhigh"
+  | "max"
+  | "ultra"
 
 export type SessionCommand =
   | { type: "user_message"; client_msg_id: string; content: ContentPart[] }
@@ -277,7 +289,12 @@ export type SessionCommand =
   | { type: "interrupt" }
   | { type: "update_policy"; rules: PolicyRule[] }
   | { type: "set_mode"; mode: AgentMode }
-  | { type: "set_model"; model: string | null; effort: ThinkingEffort | null }
+  | {
+      type: "set_model"
+      model: string | null
+      effort: ThinkingEffort | null
+      fast_mode: boolean | null
+    }
   | { type: "close"; reason: CloseReason }
   | { type: "regenerate_title" }
 

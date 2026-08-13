@@ -36,7 +36,8 @@ impl Frame {
 pub enum Framing {
   /// One JSON value per `\n`-terminated line (Claude Code, Cursor).
   LineDelimitedJson,
-  /// `Content-Length: N\r\n\r\n<N bytes>` framing (Codex JSON-RPC).
+  /// `Content-Length: N\r\n\r\n<N bytes>` framing for JSON-RPC adapters
+  /// that use a content-length transport.
   ContentLengthJsonRpc,
   /// No framing at all; the translator sees raw byte chunks.
   Raw,
@@ -64,9 +65,21 @@ pub struct SpawnSpec {
 /// stateful: it tracks open content blocks, pending tool-call input
 /// accumulation, and in-flight control requests across calls.
 pub trait Translator: Send {
+  /// Frames to send immediately after the subprocess starts. This is used by
+  /// stateful protocols that require a handshake before the first command.
+  fn initial_frames(&mut self) -> Result<Vec<Frame>, AdapterError> {
+    Ok(vec![])
+  }
+
   /// Agent → canonical. One inbound frame may yield zero or more
   /// canonical events.
   fn decode(&mut self, frame: Frame) -> Result<Vec<EventPayload>, AdapterError>;
+
+  /// Frames queued while decoding an inbound message. JSON-RPC protocols can
+  /// need to start a turn after the server assigns a thread id, for example.
+  fn drain_outgoing(&mut self) -> Result<Vec<Frame>, AdapterError> {
+    Ok(vec![])
+  }
 
   /// Canonical command → agent-native frames written to stdin.
   fn encode(&mut self, cmd: &SessionCommand) -> Result<Vec<Frame>, AdapterError>;

@@ -504,7 +504,7 @@ impl Translator for ClaudeCodeTranslator {
       }
       // Verified against CLI 2.1.224: `set_model` accepts `model` and
       // `effort`, either omittable to leave it unchanged.
-      SessionCommand::SetModel { model, effort } => {
+      SessionCommand::SetModel { model, effort, .. } => {
         let mut request = json!({ "subtype": "set_model" });
         if let Some(model) = model {
           request["model"] = json!(model);

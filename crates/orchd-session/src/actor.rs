@@ -403,6 +403,11 @@ impl SessionActor {
     let mut frames = orchd_proc::framed_stream(stdout, adapter.framing());
     forward_stderr(self.id, stderr);
 
+    if let Err(err) = write_translator_frames(&mut stdin, translator.as_mut(), true).await
+    {
+      tracing::error!(session = %self.id, error = %err, "failed to start agent protocol");
+    }
+
     let outcome = loop {
       let idle_sleep = tokio::time::sleep_until(self.idle_deadline());
       tokio::select! {
@@ -467,6 +472,9 @@ impl SessionActor {
       Err(err) => {
         tracing::warn!(session = %self.id, error = %err, "failed to decode agent frame");
       }
+    }
+    if let Err(err) = write_translator_frames(stdin, translator, false).await {
+      tracing::error!(session = %self.id, error = %err, "failed to write agent protocol response");
     }
     self.sync_native_session_id(translator).await;
     self.sync_title(translator).await;
@@ -746,6 +754,9 @@ impl SessionActor {
             tracing::error!(session = %self.id, error = %err, "failed to write to agent stdin");
             break;
           }
+        }
+        if let Err(err) = write_translator_frames(stdin, translator, false).await {
+          tracing::error!(session = %self.id, error = %err, "failed to write queued agent command");
         }
       }
       Err(err) => {
@@ -1063,6 +1074,29 @@ async fn write_frame(stdin: &mut ChildStdin, frame: &Frame) -> std::io::Result<(
   stdin.write_all(frame.as_bytes()).await?;
   stdin.write_all(b"\n").await?;
   stdin.flush().await
+}
+
+/// Sends frames created by protocol startup or by decoding a server response.
+/// Keeping this in the actor preserves the single-writer invariant for agent
+/// stdin while allowing a translator to react to asynchronous JSON-RPC data.
+async fn write_translator_frames(
+  stdin: &mut ChildStdin,
+  translator: &mut dyn Translator,
+  initial: bool,
+) -> Result<(), std::io::Error> {
+  let frames = if initial {
+    translator
+      .initial_frames()
+      .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))?
+  } else {
+    translator
+      .drain_outgoing()
+      .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))?
+  };
+  for frame in &frames {
+    write_frame(stdin, frame).await?;
+  }
+  Ok(())
 }
 
 fn approval_status_for(decision: &Decision) -> ApprovalStatus {

@@ -10,7 +10,9 @@ import {
   ShieldQuestion,
   Sparkle,
   Sparkles,
+  Zap,
 } from "lucide-react"
+import { useEffect, useState } from "react"
 import type {
   PromptContextUsage,
   PromptModelOption,
@@ -38,11 +40,13 @@ export interface SessionComposerProps {
   onSubmit: (value: string) => void
   // Seeds the model picker's initial selection.
   currentModel?: string | null
+  currentFastMode?: boolean | null
   // Empty or omitted hides the model picker, as in the draft composer
   // before there's a live socket to send commands on.
   models?: ModelInfo[]
   onModelChange?: (model: string) => void
   onThinkingChange?: (effort: ThinkingEffort) => void
+  onFastModeChange?: (fastMode: boolean) => void
   onModeChange?: (mode: AgentMode) => void
   onPermissionPreset?: (rules: PolicyRule[]) => void
   contextUsage?: PromptContextUsage | null
@@ -86,14 +90,76 @@ const PERMISSION_MODES: PromptOption[] = [
   },
 ]
 
-// Claude Code's own `--effort` vocabulary: exactly these five values,
-// verified against the installed CLI (2.1.224).
-const THINKING_LEVELS: PromptOption[] = [
-  { value: "low", label: "Low", icon: <Sparkle /> },
-  { value: "medium", label: "Medium", icon: <Sparkles /> },
-  { value: "high", label: "High", icon: <Brain /> },
-  { value: "xhigh", label: "Extra high", icon: <Gauge /> },
-  { value: "max", label: "Max", icon: <Flame /> },
+const FALLBACK_CLAUDE_EFFORTS: ThinkingEffort[] = [
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+]
+const FALLBACK_CODEX_EFFORTS: ThinkingEffort[] = [
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+]
+
+const REASONING_LABELS: Record<ThinkingEffort, string> = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  xhigh: "Extra high",
+  max: "Max",
+  ultra: "Ultra",
+}
+
+function reasoningIcon(effort: ThinkingEffort) {
+  switch (effort) {
+    case "low":
+      return <Sparkle />
+    case "medium":
+      return <Sparkles />
+    case "high":
+      return <Brain />
+    case "xhigh":
+      return <Gauge />
+    case "max":
+      return <Flame />
+    case "ultra":
+      return <Zap />
+  }
+}
+
+function reasoningOptions(
+  model: ModelInfo | undefined,
+  agentKind: string
+): PromptOption[] {
+  const efforts = model?.supported_reasoning_efforts.length
+    ? model.supported_reasoning_efforts
+    : agentKind === "codex"
+      ? FALLBACK_CODEX_EFFORTS
+      : FALLBACK_CLAUDE_EFFORTS
+
+  return efforts.map((effort) => ({
+    value: effort,
+    label: REASONING_LABELS[effort],
+    icon: reasoningIcon(effort),
+  }))
+}
+
+const SPEED_MODES: PromptOption[] = [
+  {
+    value: "standard",
+    label: "Standard",
+    icon: <Gauge />,
+    description: "Normal response speed",
+  },
+  {
+    value: "fast",
+    label: "Fast",
+    icon: <Zap />,
+    description: "1.5x speed with higher credit use",
+  },
 ]
 
 const PERMISSION_PRESET_RULES: Record<string, PolicyRule[]> = {
@@ -117,24 +183,92 @@ export function SessionComposer({
   onStop,
   onSubmit,
   currentModel,
+  currentFastMode,
   models = [],
   onModelChange,
   onThinkingChange,
+  onFastModeChange,
   onModeChange,
   onPermissionPreset,
   contextUsage,
 }: SessionComposerProps) {
-  const modelOptions: PromptModelOption[] = models.map((model) => {
-    const ProviderIcon = MODEL_PROVIDER_ICON[model.provider]
-    return {
-      value: model.id,
-      label: model.display_name,
-      description: `${formatContextSize(model.context_window)} context`,
-      provider: model.provider,
-      providerLabel: MODEL_PROVIDER_LABEL[model.provider],
-      providerIcon: <ProviderIcon />,
+  const [selectedModel, setSelectedModel] = useState<string | undefined>(
+    currentModel ?? undefined
+  )
+  const [selectedEffort, setSelectedEffort] = useState<
+    ThinkingEffort | undefined
+  >()
+  const [selectedFastMode, setSelectedFastMode] = useState(
+    currentFastMode ?? false
+  )
+
+  useEffect(() => {
+    setSelectedModel(currentModel ?? undefined)
+  }, [currentModel])
+
+  useEffect(() => {
+    setSelectedFastMode(currentFastMode ?? false)
+  }, [currentFastMode])
+
+  const provider = agentKind === "codex" ? "open_ai" : "anthropic"
+  const modelOptions: PromptModelOption[] = models
+    .filter((model) => model.provider === provider)
+    .map((model) => {
+      const ProviderIcon = MODEL_PROVIDER_ICON[model.provider]
+      return {
+        value: model.id,
+        label: model.display_name,
+        description: `${formatContextSize(model.context_window)} context`,
+        provider: model.provider,
+        providerLabel: MODEL_PROVIDER_LABEL[model.provider],
+        providerIcon: <ProviderIcon />,
+      }
+    })
+  const selectedModelId = selectedModel ?? modelOptions[0]?.value
+  const selectedModelInfo = models.find((model) => model.id === selectedModelId)
+  const thinkingOptions = reasoningOptions(selectedModelInfo, agentKind)
+  const defaultEffort =
+    selectedModelInfo?.default_reasoning_effort ??
+    (thinkingOptions[0]?.value as ThinkingEffort | undefined)
+  const effectiveEffort =
+    selectedEffort &&
+    thinkingOptions.some((option) => option.value === selectedEffort)
+      ? selectedEffort
+      : defaultEffort
+  const fastModeAvailable =
+    agentKind === "codex" && selectedModelInfo?.supports_fast_mode === true
+
+  const handleModelChange = (model: string) => {
+    setSelectedModel(model)
+    onModelChange?.(model)
+
+    const nextModel = models.find((candidate) => candidate.id === model)
+    const nextThinkingOptions = reasoningOptions(nextModel, agentKind)
+    const nextDefaultEffort =
+      nextModel?.default_reasoning_effort ??
+      (nextThinkingOptions[0]?.value as ThinkingEffort | undefined)
+    const nextEffort =
+      selectedEffort &&
+      nextThinkingOptions.some((option) => option.value === selectedEffort)
+        ? selectedEffort
+        : nextDefaultEffort
+
+    if (nextEffort) {
+      setSelectedEffort(nextEffort)
+      onThinkingChange?.(nextEffort)
     }
-  })
+
+    if (nextModel?.supports_fast_mode !== true && selectedFastMode) {
+      setSelectedFastMode(false)
+      onFastModeChange?.(false)
+    }
+  }
+
+  const handleFastModeChange = (mode: string) => {
+    const fastMode = mode === "fast"
+    setSelectedFastMode(fastMode)
+    onFastModeChange?.(fastMode)
+  }
 
   return (
     <div className="shrink-0 p-3">
@@ -155,8 +289,8 @@ export function SessionComposer({
             { value: "attach", label: "Attach file", icon: <Paperclip /> },
           ]}
           models={onModelChange ? modelOptions : []}
-          defaultModel={currentModel ?? undefined}
-          onModelChange={onModelChange}
+          model={selectedModelId}
+          onModelChange={handleModelChange}
           modes={onModeChange ? MODES : []}
           defaultMode="build"
           onModeChange={(mode) => onModeChange?.(mode as AgentMode)}
@@ -165,10 +299,17 @@ export function SessionComposer({
           onPermissionModeChange={(value) =>
             onPermissionPreset?.(PERMISSION_PRESET_RULES[value] ?? [])
           }
-          thinkingLevels={onThinkingChange ? THINKING_LEVELS : []}
-          onThinkingLevelChange={(level) =>
-            onThinkingChange?.(level as ThinkingEffort)
-          }
+          speedModes={fastModeAvailable && onFastModeChange ? SPEED_MODES : []}
+          speedMode={selectedFastMode ? "fast" : "standard"}
+          defaultSpeedMode="standard"
+          onSpeedModeChange={handleFastModeChange}
+          thinkingLevels={onThinkingChange ? thinkingOptions : []}
+          thinkingLevel={effectiveEffort}
+          onThinkingLevelChange={(level) => {
+            const effort = level as ThinkingEffort
+            setSelectedEffort(effort)
+            onThinkingChange?.(effort)
+          }}
           contextUsage={contextUsage}
         />
       </div>

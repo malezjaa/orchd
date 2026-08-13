@@ -243,8 +243,12 @@ export function useSessionSocket(
   )
 
   const setModel = useCallback(
-    (model: string | null, effort: ThinkingEffort | null) => {
-      if (!sendRaw({ type: "set_model", model, effort }))
+    (
+      model: string | null,
+      effort: ThinkingEffort | null,
+      fastMode: boolean | null = null
+    ) => {
+      if (!sendRaw({ type: "set_model", model, effort, fast_mode: fastMode }))
         toast.error("Not connected to the session")
     },
     [sendRaw]

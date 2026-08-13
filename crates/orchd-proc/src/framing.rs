@@ -4,9 +4,9 @@ use tokio::io::AsyncRead;
 use tokio_util::codec::{FramedRead, LinesCodec};
 
 /// Turn one subprocess's stdout into a stream of protocol `Frame`s per the
-/// adapter's declared `Framing`. Only `LineDelimitedJson` is implemented so
-/// far (Claude Code, Cursor); `ContentLengthJsonRpc` lands with the Codex
-/// adapter.
+/// adapter's declared `Framing`. Codex app-server currently uses the same
+/// newline-delimited transport as Claude Code. Content-length framing remains
+/// available for adapters that need it.
 pub fn framed_stream<R>(
   stdout: R,
   framing: Framing,
@@ -23,7 +23,7 @@ where
       })
       .boxed(),
     Framing::ContentLengthJsonRpc => {
-      unimplemented!("Content-Length JSON-RPC framing lands with the Codex adapter")
+      unimplemented!("Content-Length JSON-RPC framing has no active adapter")
     }
     Framing::Raw => unimplemented!("Raw framing has no adapter using it yet"),
   }

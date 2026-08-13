@@ -233,6 +233,10 @@ export interface PromptInputProps extends Omit<
   permissionMode?: string
   defaultPermissionMode?: string
   onPermissionModeChange?: (mode: string) => void
+  speedModes?: PromptOption[]
+  speedMode?: string
+  defaultSpeedMode?: string
+  onSpeedModeChange?: (mode: string) => void
   thinkingLevels?: PromptOption[]
   thinkingLevel?: string
   defaultThinkingLevel?: string
@@ -299,7 +303,7 @@ function ToolbarPicker({
       <PopoverContent
         align="start"
         sideOffset={8}
-        className={cn("w-64 gap-0 p-1.5", contentClassName)}
+        className={cn("w-64 gap-0 rounded-xl p-1.5", contentClassName)}
       >
         {options.map((option) => {
           const selected = option.value === value
@@ -662,6 +666,10 @@ export function PromptInput({
   permissionMode,
   defaultPermissionMode,
   onPermissionModeChange,
+  speedModes = [],
+  speedMode,
+  defaultSpeedMode,
+  onSpeedModeChange,
   thinkingLevels = [],
   thinkingLevel,
   defaultThinkingLevel,
@@ -695,6 +703,9 @@ export function PromptInput({
   const [internalPermissionMode, setInternalPermissionMode] = useState(
     defaultPermissionMode ?? permissionModes[0]?.value
   )
+  const [internalSpeedMode, setInternalSpeedMode] = useState(
+    defaultSpeedMode ?? speedModes[0]?.value
+  )
   const [internalThinkingLevel, setInternalThinkingLevel] = useState(
     defaultThinkingLevel ?? thinkingLevels[0]?.value
   )
@@ -703,6 +714,7 @@ export function PromptInput({
   const currentModelValue = model ?? internalModel
   const currentMode = mode ?? internalMode
   const currentPermissionMode = permissionMode ?? internalPermissionMode
+  const currentSpeedMode = speedMode ?? internalSpeedMode
   const currentThinkingLevel = thinkingLevel ?? internalThinkingLevel
   const canSubmit = Boolean(currentValue.trim()) && !disabled && !loading
 
@@ -750,6 +762,11 @@ export function PromptInput({
   const setPermissionMode = (next: string) => {
     if (permissionMode === undefined) setInternalPermissionMode(next)
     onPermissionModeChange?.(next)
+  }
+
+  const setSpeedMode = (next: string) => {
+    if (speedMode === undefined) setInternalSpeedMode(next)
+    onSpeedModeChange?.(next)
   }
 
   const setThinkingLevel = (next: string) => {
@@ -838,7 +855,7 @@ export function PromptInput({
               side="top"
               align="start"
               sideOffset={8}
-              className="w-56 gap-0 p-1.5"
+              className="w-56 gap-0 rounded-xl p-1.5"
             >
               {actions.map((action) => (
                 <button
@@ -893,6 +910,13 @@ export function PromptInput({
           options={permissionModes}
           disabled={disabled || loading}
           placeholder="Permissions"
+        />
+        <ToolbarPicker
+          value={currentSpeedMode}
+          onChange={setSpeedMode}
+          options={speedModes}
+          disabled={disabled || loading}
+          placeholder="Speed"
         />
         <ToolbarPicker
           value={currentThinkingLevel}

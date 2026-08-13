@@ -466,15 +466,11 @@ async fn resolve_in_workspace(cwd: &str, path: &str) -> Result<PathBuf, ApiError
     let candidate = PathBuf::from(&path);
     // The client sends absolute paths (tree root joined with the relative
     // file), but tolerate relative ones by anchoring them to the cwd.
-    let candidate = if candidate.is_absolute() {
-      candidate
-    } else {
-      canonical_cwd.join(candidate)
-    };
+    let candidate =
+      if candidate.is_absolute() { candidate } else { canonical_cwd.join(candidate) };
 
-    let canonical_path = std::fs::canonicalize(&candidate).map_err(|err| {
-      ApiError::bad_request(format!("cannot open file: {err}"))
-    })?;
+    let canonical_path = std::fs::canonicalize(&candidate)
+      .map_err(|err| ApiError::bad_request(format!("cannot open file: {err}")))?;
     if canonical_path.is_dir() {
       return Err(ApiError::bad_request("path is not a file"));
     }

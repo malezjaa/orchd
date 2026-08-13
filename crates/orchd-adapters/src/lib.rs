@@ -1,4 +1,5 @@
 pub mod claude_code;
+pub mod codex;
 
 use orchd_core::{AgentAdapter, AgentKind};
 
@@ -7,6 +8,7 @@ use orchd_core::{AgentAdapter, AgentKind};
 pub fn adapter_for(kind: AgentKind) -> Option<Box<dyn AgentAdapter>> {
   match kind {
     AgentKind::ClaudeCode => Some(Box::new(claude_code::ClaudeCodeAdapter::default())),
-    AgentKind::Echo | AgentKind::Codex | AgentKind::Aider | AgentKind::Cursor => None,
+    AgentKind::Codex => Some(Box::new(codex::CodexAdapter::default())),
+    AgentKind::Echo | AgentKind::Aider | AgentKind::Cursor => None,
   }
 }

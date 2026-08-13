@@ -1,8 +1,4 @@
-import {
-  Bot,
-  PanelLeft,
-  TriangleAlert,
-} from "lucide-react"
+import { Bot, PanelLeft, TriangleAlert } from "lucide-react"
 import {
   Fragment,
   useCallback,
@@ -28,17 +24,14 @@ import {
   type AgentKind,
   type AgentMode,
   DEFAULT_ANTHROPIC_MODEL,
+  DEFAULT_CODEX_MODEL,
   type ModelInfo,
   type PolicyRule,
   type ProjectRecord,
   type SessionRecord,
   type ThinkingEffort,
 } from "@/lib/orchd"
-import {
-  queryKeys,
-  useCreateSession,
-  useModels,
-} from "@/lib/queries"
+import { queryKeys, useCreateSession, useModels } from "@/lib/queries"
 import { finalAssistantTextIds, isHiddenToolCall } from "@/lib/timeline"
 import { groupTimelineByTurn, turnDurationSeconds } from "@/lib/timeline-groups"
 import { useSessionSocket } from "@/lib/use-session-socket"
@@ -53,13 +46,15 @@ interface PendingSessionSettings {
   model: string | null
   mode: AgentMode | null
   effort: ThinkingEffort | null
+  fastMode: boolean | null
   permissionRules: PolicyRule[] | null
 }
 
 const EMPTY_PENDING_SETTINGS: PendingSessionSettings = {
-  model: DEFAULT_ANTHROPIC_MODEL,
+  model: null,
   mode: null,
   effort: null,
+  fastMode: false,
   permissionRules: null,
 }
 
@@ -232,7 +227,12 @@ export function SessionPanel({
   // spawn default is the right last resort because the composer's model
   // picker is uncontrolled and seeds itself once at mount: `null` would
   // lock it onto the catalog's first entry forever.
-  const currentModel = state.model ?? session?.model ?? DEFAULT_ANTHROPIC_MODEL
+  const currentModel =
+    state.model ??
+    session?.model ??
+    (session?.agent_kind === "codex"
+      ? DEFAULT_CODEX_MODEL
+      : DEFAULT_ANTHROPIC_MODEL)
   const liveCatalogEntry = models.find((m) => m.id === currentModel)
   const context = session?.context
   const contextUsage: PromptContextUsage | null =
@@ -284,8 +284,16 @@ export function SessionPanel({
   useEffect(() => {
     if (status !== "open" || !pendingFirstMessage) return
     if (draftSettings.mode) setMode(draftSettings.mode)
-    if (draftSettings.model || draftSettings.effort) {
-      setModel(draftSettings.model, draftSettings.effort)
+    if (
+      draftSettings.model ||
+      draftSettings.effort ||
+      draftSettings.fastMode !== null
+    ) {
+      setModel(
+        draftSettings.model,
+        draftSettings.effort,
+        draftSettings.fastMode
+      )
     }
     if (draftSettings.permissionRules)
       updatePolicy(draftSettings.permissionRules)
@@ -439,7 +447,13 @@ export function SessionPanel({
           onStop={() => {}}
           onSubmit={handleDraftSubmit}
           models={models}
-          currentModel={draftSettings.model}
+          currentModel={
+            draftSettings.model ??
+            (draft.agentKind === "codex"
+              ? DEFAULT_CODEX_MODEL
+              : DEFAULT_ANTHROPIC_MODEL)
+          }
+          currentFastMode={draftSettings.fastMode}
           onModelChange={(model) =>
             setDraftSettings((prev) => ({ ...prev, model }))
           }
@@ -448,6 +462,9 @@ export function SessionPanel({
           }
           onThinkingChange={(effort) =>
             setDraftSettings((prev) => ({ ...prev, effort }))
+          }
+          onFastModeChange={(fastMode) =>
+            setDraftSettings((prev) => ({ ...prev, fastMode }))
           }
           onPermissionPreset={(permissionRules) =>
             setDraftSettings((prev) => ({ ...prev, permissionRules }))
@@ -555,8 +572,9 @@ export function SessionPanel({
                 onSubmit={sendUserMessage}
                 currentModel={currentModel}
                 models={models}
-                onModelChange={(model) => setModel(model, null)}
-                onThinkingChange={(effort) => setModel(null, effort)}
+                onModelChange={(model) => setModel(model, null, null)}
+                onThinkingChange={(effort) => setModel(null, effort, null)}
+                onFastModeChange={(fastMode) => setModel(null, null, fastMode)}
                 onModeChange={setMode}
                 onPermissionPreset={updatePolicy}
                 contextUsage={contextUsage}
