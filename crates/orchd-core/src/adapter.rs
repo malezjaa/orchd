@@ -48,6 +48,9 @@ pub enum Framing {
 pub struct LaunchSpec {
   pub cwd: PathBuf,
   pub resume_native_session_id: Option<String>,
+  /// The model selected for a new session, or the last persisted model when
+  /// the actor is being resumed.
+  pub model: Option<String>,
 }
 
 /// Everything the process manager needs to spawn one adapter's subprocess.

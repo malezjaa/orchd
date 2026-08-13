@@ -78,7 +78,7 @@ impl AgentAdapter for ClaudeCodeAdapter {
       // A resumed session omits `--model` so it keeps whatever it was last
       // switched to.
       args.push("--model".to_string());
-      args.push(DEFAULT_MODEL.to_string());
+      args.push(launch.model.as_deref().unwrap_or(DEFAULT_MODEL).to_string());
     }
 
     SpawnSpec {

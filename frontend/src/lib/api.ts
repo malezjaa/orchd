@@ -131,10 +131,10 @@ export const api = {
   regenerateSessionTitle: (id: string) =>
     request<void>(`/sessions/${id}/regenerate-title`, { method: "POST" }),
 
-  createSession: (agentKind: AgentKind, projectId: string) =>
+  createSession: (projectId: string) =>
     request<SessionRecord>("/sessions", {
       method: "POST",
-      body: JSON.stringify({ agent_kind: agentKind, project_id: projectId }),
+      body: JSON.stringify({ project_id: projectId }),
     }),
 
   browseFolder: (path?: string) =>

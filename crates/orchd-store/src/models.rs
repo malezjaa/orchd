@@ -128,6 +128,8 @@ pub struct SettingsRecord {
   pub mono_font_size: Option<String>,
   pub time_format: Option<String>,
   pub code_theme: Option<String>,
+  pub model: Option<String>,
+  pub reasoning_effort: Option<String>,
   #[serde(with = "time::serde::rfc3339")]
   pub updated_at: OffsetDateTime,
 }
@@ -150,6 +152,10 @@ pub struct SettingsPatch {
   pub time_format: Option<Option<String>>,
   #[serde(default)]
   pub code_theme: Option<Option<String>>,
+  #[serde(default)]
+  pub model: Option<Option<String>>,
+  #[serde(default)]
+  pub reasoning_effort: Option<Option<String>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

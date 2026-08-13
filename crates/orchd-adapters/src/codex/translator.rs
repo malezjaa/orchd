@@ -56,6 +56,7 @@ impl CodexTranslator {
     capabilities: AgentCapabilities,
     cwd: PathBuf,
     resume_native_session_id: Option<String>,
+    model: Option<String>,
   ) -> Self {
     Self {
       native_session_id: resume_native_session_id,
@@ -72,7 +73,7 @@ impl CodexTranslator {
       blocks: HashMap::new(),
       active_turn_id: None,
       interrupt_requested: false,
-      model: None,
+      model,
       effort: None,
       fast_mode: None,
     }
@@ -755,6 +756,7 @@ mod tests {
         skills: true,
       },
       PathBuf::from("/tmp/project"),
+      None,
       None,
     )
   }

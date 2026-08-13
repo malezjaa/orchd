@@ -8,25 +8,17 @@ import {
   type CommandItem,
 } from "@/components/motion/command-palette"
 import { useFolderBrowseItems } from "@/lib/hooks/use-folder-browser"
-import {
-  AGENT_ICON,
-  AGENT_LABEL,
-  type AgentKind,
-  DISABLED_AGENT_KINDS,
-  type ProjectRecord,
-} from "@/lib/orchd"
+import type { ProjectRecord } from "@/lib/orchd"
 import { useCreateProject, useProjects } from "@/lib/queries"
 
-type Step = "project" | "browse" | "name" | "agent"
-const AGENT_KINDS = Object.keys(AGENT_LABEL) as AgentKind[]
+type Step = "project" | "browse" | "name"
 
 export interface NewSessionPaletteProps {
   open: boolean
   onClose: () => void
-  // Picking an agent only hands the choice back up as a draft. The real
-  // session is created on first send, so an abandoned draft never
-  // touches the backend.
-  onDraftStart: (project: ProjectRecord, agentKind: AgentKind) => void
+  // Picking a project only hands the choice back up as a draft. The model
+  // and provider come from settings when the session is created.
+  onDraftStart: (project: ProjectRecord) => void
 }
 
 function basename(path: string) {
@@ -44,9 +36,6 @@ export function NewSessionPalette({
   const [step, setStep] = useState<Step>("project")
   const [browsePath, setBrowsePath] = useState<string | undefined>(undefined)
   const [pendingFolderPath, setPendingFolderPath] = useState("")
-  const [selectedProject, setSelectedProject] = useState<ProjectRecord | null>(
-    null
-  )
   const [query, setQuery] = useState("")
 
   // Reset the flow each time the palette transitions closed -> open.
@@ -57,7 +46,6 @@ export function NewSessionPalette({
       setStep("project")
       setBrowsePath(undefined)
       setPendingFolderPath("")
-      setSelectedProject(null)
       setQuery("")
     }
   }
@@ -81,8 +69,8 @@ export function NewSessionPalette({
     }
   )
 
-  const startSession = (project: ProjectRecord, agentKind: AgentKind) => {
-    onDraftStart(project, agentKind)
+  const startSession = (project: ProjectRecord) => {
+    onDraftStart(project)
     onClose()
   }
 
@@ -95,9 +83,7 @@ export function NewSessionPalette({
         path: pendingFolderPath,
       })
       toast.success("Project created")
-      setSelectedProject(project)
-      setQuery("")
-      setStep("agent")
+      startSession(project)
     } catch (err) {
       toast.error("Couldn't create project", {
         description: err instanceof Error ? err.message : undefined,
@@ -120,9 +106,7 @@ export function NewSessionPalette({
         keywords: [project.path],
         keepOpen: true,
         onSelect: () => {
-          setSelectedProject(project)
-          setQuery("")
-          setStep("agent")
+          startSession(project)
         },
       })),
       {
@@ -157,35 +141,12 @@ export function NewSessionPalette({
           label: `Create "${query.trim()}"`,
           description: pendingFolderPath,
           group: "Confirm",
-          // Advances to the agent step on success; keeping it open on
-          // failure lets the user retry without restarting the flow.
+          // Keep the palette open on failure so the user can retry.
           keepOpen: true,
           onSelect: createProjectFromName,
         },
       ]
     }
-  } else {
-    placeholder = selectedProject
-      ? `Agent for ${selectedProject.name}…`
-      : "Choose an agent…"
-    emptyMessage = "No matching agents."
-    items = AGENT_KINDS.map((kind) => {
-      const disabled = DISABLED_AGENT_KINDS.includes(kind)
-      return {
-        id: kind,
-        label: AGENT_LABEL[kind],
-        description: disabled ? "Coming soon" : undefined,
-        group: "Agent",
-        icon: AGENT_ICON[kind],
-        disabled,
-        // startSession closes the palette itself on success; keeping it
-        // open here means a failed create doesn't get silently dismissed.
-        keepOpen: true,
-        onSelect: () => {
-          if (selectedProject && !disabled) startSession(selectedProject, kind)
-        },
-      }
-    })
   }
 
   return (

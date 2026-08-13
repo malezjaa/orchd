@@ -1,5 +1,8 @@
 use dashmap::{DashMap, mapref::entry::Entry};
-use orchd_core::{AgentKind, ProjectId, SessionId, sanitize_title};
+use orchd_core::{
+  AgentKind, ModelProvider, ProjectId, SUPPORTED_MODELS, SessionId, find_model,
+  sanitize_title,
+};
 use orchd_store::{
   ProjectRecord, SessionRecord, SessionStatus, SettingsPatch, SettingsRecord, Store,
 };
@@ -33,7 +36,6 @@ impl SessionRegistry {
   /// doesn't.
   pub async fn create_session(
     &self,
-    agent_kind: AgentKind,
     project_id: ProjectId,
   ) -> Result<SessionRecord, RegistryError> {
     let project = self
@@ -42,7 +44,21 @@ impl SessionRegistry {
       .await?
       .ok_or(RegistryError::ProjectNotFound(project_id))?;
 
-    let record = self.store.create_session(agent_kind, project_id, &project.path).await?;
+    let settings = self.store.get_settings().await?;
+    let model = settings
+      .model
+      .as_deref()
+      .and_then(find_model)
+      .or_else(|| find_model("claude-sonnet-5"))
+      .unwrap_or(SUPPORTED_MODELS[0]);
+    let agent_kind = match model.provider {
+      ModelProvider::Anthropic => AgentKind::ClaudeCode,
+      ModelProvider::OpenAi => AgentKind::Codex,
+    };
+    let record = self
+      .store
+      .create_session_with_model(agent_kind, project_id, &project.path, Some(model.id))
+      .await?;
     let handle = self.spawn_actor(&record, None).await?;
     self.sessions.insert(record.id, handle);
     Ok(record)
@@ -139,6 +155,7 @@ impl SessionRegistry {
     let actor = SessionActor::new(
       record.id,
       record.agent_kind,
+      record.model.clone(),
       record.cwd.clone(),
       self.store.clone(),
       cmd_rx,

@@ -60,6 +60,7 @@ enum AttemptOutcome {
 pub struct SessionActor {
   id: SessionId,
   agent_kind: AgentKind,
+  model: Option<String>,
   cwd: String,
   store: Store,
   cmd_rx: mpsc::Receiver<SessionCommand>,
@@ -92,6 +93,7 @@ impl SessionActor {
   pub async fn new(
     id: SessionId,
     agent_kind: AgentKind,
+    model: Option<String>,
     cwd: String,
     store: Store,
     cmd_rx: mpsc::Receiver<SessionCommand>,
@@ -111,6 +113,7 @@ impl SessionActor {
     Ok(Self {
       id,
       agent_kind,
+      model,
       cwd,
       store: store.clone(),
       cmd_rx,
@@ -347,7 +350,11 @@ impl SessionActor {
     adapter: &dyn AgentAdapter,
     resume_native_session_id: Option<String>,
   ) -> AttemptOutcome {
-    let launch = LaunchSpec { cwd: PathBuf::from(&self.cwd), resume_native_session_id };
+    let launch = LaunchSpec {
+      cwd: PathBuf::from(&self.cwd),
+      resume_native_session_id,
+      model: self.model.clone(),
+    };
     let spawn_spec = adapter.spawn_spec(&launch);
     let mut translator = adapter.translator(&launch);
 

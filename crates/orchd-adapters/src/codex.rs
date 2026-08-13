@@ -67,6 +67,7 @@ impl AgentAdapter for CodexAdapter {
       capabilities(),
       launch.cwd.clone(),
       launch.resume_native_session_id.clone(),
+      launch.model.clone(),
     ))
   }
 }

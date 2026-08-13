@@ -25,6 +25,7 @@ import {
   type AgentMode,
   DEFAULT_ANTHROPIC_MODEL,
   DEFAULT_CODEX_MODEL,
+  DEFAULT_REASONING_EFFORT,
   type ContentPart,
   type ModelInfo,
   type PolicyRule,
@@ -35,6 +36,7 @@ import {
   useModels,
   useProjectSkills,
   useProjectTree,
+  useSettings,
 } from "@/lib/queries"
 import { finalAssistantTextIds, isHiddenToolCall } from "@/lib/timeline"
 import { groupTimelineByTurn, turnDurationSeconds } from "@/lib/timeline-groups"
@@ -83,8 +85,14 @@ function EmptyState({
   )
 }
 
-function DraftHeader({ draft }: { draft: DraftSession }) {
-  const Icon = agentIcon(draft.agentKind)
+function DraftHeader({
+  draft,
+  agentKind,
+}: {
+  draft: DraftSession
+  agentKind: AgentKind
+}) {
+  const Icon = agentIcon(agentKind)
   return (
     <header className="flex h-14 shrink-0 items-center gap-2.5 border-b border-border px-3">
       <AnimatedSidebarTrigger className="text-muted-foreground hover:bg-muted hover:text-foreground">
@@ -116,11 +124,28 @@ export function SessionPanel() {
     sessionDeleted,
   } = useWorkspace()
   const createSession = useCreateSession()
+  const { data: settings } = useSettings()
+  const modelsQuery = useModels()
+  const models = modelsQuery.data ?? EMPTY_MODELS
+  const configuredModelId = settings?.model ?? DEFAULT_ANTHROPIC_MODEL
+  const configuredModel =
+    models.find((model) => model.id === configuredModelId) ??
+    models.find((model) => model.id === DEFAULT_ANTHROPIC_MODEL)
+  const configuredAgentKind: AgentKind =
+    configuredModel?.provider === "open_ai" ? "codex" : "claude_code"
+  const configuredReasoningEffort: ThinkingEffort =
+    (configuredModel?.supported_reasoning_efforts.includes(
+      settings?.reasoning_effort as ThinkingEffort
+    )
+      ? settings?.reasoning_effort
+      : undefined) ??
+    configuredModel?.default_reasoning_effort ??
+    DEFAULT_REASONING_EFFORT
   // Draft sessions do not have a live session cwd yet, but their selected
   // project is already the correct root for file references.
   const fileTreeRoot = treeRoot ?? draft?.project.path ?? null
-  const composerAgentKind = (session?.agent_kind ?? draft?.agentKind ??
-    "claude_code") as AgentKind
+  const composerAgentKind = (session?.agent_kind ??
+    configuredAgentKind) as AgentKind
   const { data: projectTree } = useProjectTree(
     fileTreeRoot ?? undefined,
     Boolean(fileTreeRoot)
@@ -141,7 +166,7 @@ export function SessionPanel() {
 
   // Reset synchronously during render, not in an effect, so switching
   // drafts can't flash the previous draft's settings for a frame.
-  const draftKey = draft ? `${draft.project.id}:${draft.agentKind}` : null
+  const draftKey = draft ? draft.project.id : null
   const draftKeyRef = useRef(draftKey)
   if (draftKeyRef.current !== draftKey) {
     draftKeyRef.current = draftKey
@@ -212,9 +237,6 @@ export function SessionPanel() {
     titleUpdate,
   ])
 
-  const modelsQuery = useModels()
-  const models = modelsQuery.data ?? EMPTY_MODELS
-
   // Socket events are fresher than the REST record, which only holds the
   // last persisted value. A freshly created session has neither, and the
   // spawn default is the right last resort because the composer's model
@@ -278,17 +300,11 @@ export function SessionPanel() {
   useEffect(() => {
     if (status !== "open" || !pendingFirstMessage) return
     if (draftSettings.mode) setMode(draftSettings.mode)
-    if (
-      draftSettings.model ||
-      draftSettings.effort ||
-      draftSettings.fastMode !== null
-    ) {
-      setModel(
-        draftSettings.model,
-        draftSettings.effort,
-        draftSettings.fastMode
-      )
-    }
+    setModel(
+      draftSettings.model ?? configuredModelId,
+      draftSettings.effort ?? configuredReasoningEffort,
+      draftSettings.fastMode
+    )
     if (draftSettings.permissionRules)
       updatePolicy(draftSettings.permissionRules)
     sendUserMessage(pendingFirstMessage.text, pendingFirstMessage.content)
@@ -302,6 +318,8 @@ export function SessionPanel() {
     setMode,
     setModel,
     updatePolicy,
+    configuredModelId,
+    configuredReasoningEffort,
   ])
 
   const handleApprove = useCallback(
@@ -349,7 +367,6 @@ export function SessionPanel() {
     if (!trimmed) return
     try {
       const created = await createSession.mutateAsync({
-        agentKind: draft.agentKind,
         projectId: draft.project.id,
       })
       setPendingFirstMessage({ text: trimmed, content })
@@ -400,24 +417,20 @@ export function SessionPanel() {
   if (!session && draft) {
     return (
       <div className="flex h-full min-h-0 flex-1 flex-col">
-        <DraftHeader draft={draft} />
+        <DraftHeader draft={draft} agentKind={configuredAgentKind} />
         <EmptyState
           title="New session"
           description="Send a message to start. Nothing is saved until you do."
         />
         <SessionComposer
-          agentKind={draft.agentKind}
+          agentKind={configuredAgentKind}
           loading={createSession.isPending}
           disabled={createSession.isPending}
           onStop={() => {}}
           onSubmit={handleDraftSubmit}
           models={models}
-          currentModel={
-            draftSettings.model ??
-            (draft.agentKind === "codex"
-              ? DEFAULT_CODEX_MODEL
-              : DEFAULT_ANTHROPIC_MODEL)
-          }
+          currentModel={draftSettings.model ?? configuredModelId}
+          currentEffort={draftSettings.effort ?? configuredReasoningEffort}
           currentFastMode={draftSettings.fastMode}
           onModelChange={(model) =>
             setDraftSettings((prev) => ({ ...prev, model }))

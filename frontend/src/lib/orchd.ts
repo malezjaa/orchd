@@ -113,6 +113,8 @@ export interface SettingsRecord {
   mono_font_size: string | null
   time_format: string | null
   code_theme: string | null
+  model: string | null
+  reasoning_effort: ThinkingEffort | null
   updated_at: string
 }
 
@@ -123,6 +125,8 @@ export interface SettingsPatch {
   mono_font_size?: string | null
   time_format?: string | null
   code_theme?: string | null
+  model?: string | null
+  reasoning_effort?: ThinkingEffort | null
 }
 
 // Bump alongside the workspace version in the root Cargo.toml when cutting a release.
@@ -217,6 +221,7 @@ export interface ModelInfo {
 export const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5"
 // Mirrors the default model reported by the installed Codex app-server.
 export const DEFAULT_CODEX_MODEL = "gpt-5.6-sol"
+export const DEFAULT_REASONING_EFFORT: ThinkingEffort = "medium"
 
 export const MODEL_PROVIDER_LABEL: Record<ModelProvider, string> = {
   anthropic: "Anthropic",

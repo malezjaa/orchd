@@ -238,13 +238,7 @@ mod tests {
 
 #[derive(Deserialize)]
 pub struct CreateSessionRequest {
-  #[serde(default = "default_agent_kind")]
-  pub agent_kind: AgentKind,
   pub project_id: ProjectId,
-}
-
-fn default_agent_kind() -> AgentKind {
-  AgentKind::Echo
 }
 
 /// Usage resolved against the static model catalog, so a client gets
@@ -286,7 +280,7 @@ async fn create_session(
   State(state): State<AppState>,
   Json(req): Json<CreateSessionRequest>,
 ) -> Result<Json<SessionResponse>, ApiError> {
-  let record = state.registry.create_session(req.agent_kind, req.project_id).await?;
+  let record = state.registry.create_session(req.project_id).await?;
   Ok(Json(SessionResponse::from(&state, record)))
 }
 

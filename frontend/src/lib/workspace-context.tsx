@@ -1,11 +1,10 @@
 import { createContext, useContext } from "react"
-import type { AgentKind, ProjectRecord, SessionRecord } from "@/lib/orchd"
+import type { ProjectRecord, SessionRecord } from "@/lib/orchd"
 
 export type CurrentTab = { type: "session" } | { type: "path"; file: string }
 
 export interface DraftSession {
   project: ProjectRecord
-  agentKind: AgentKind
 }
 
 export interface WorkspaceContextValue {
@@ -23,7 +22,7 @@ export interface WorkspaceContextValue {
   newSessionOpen: boolean
   newProjectOpen: boolean
   selectSession: (id: string) => void
-  startDraft: (project: ProjectRecord, agentKind: AgentKind) => void
+  startDraft: (project: ProjectRecord) => void
   sessionCreated: (session: SessionRecord) => void
   sessionDeleted: (id: string) => void
   closeTree: () => void

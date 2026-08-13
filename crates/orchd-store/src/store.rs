@@ -49,6 +49,16 @@ impl Store {
     project_id: ProjectId,
     cwd: &str,
   ) -> Result<SessionRecord, StoreError> {
+    self.create_session_with_model(agent_kind, project_id, cwd, None).await
+  }
+
+  pub async fn create_session_with_model(
+    &self,
+    agent_kind: AgentKind,
+    project_id: ProjectId,
+    cwd: &str,
+    model: Option<&str>,
+  ) -> Result<SessionRecord, StoreError> {
     let record = SessionRecord {
       id: SessionId::new(),
       agent_kind,
@@ -58,7 +68,7 @@ impl Store {
       native_session_id: None,
       pgid: None,
       title: None,
-      model: None,
+      model: model.map(str::to_string),
       context_tokens_used: None,
       archived_at: None,
       pinned_at: None,
@@ -70,13 +80,14 @@ impl Store {
       "INSERT INTO sessions (id, agent_kind, project_id, cwd, status, \
        native_session_id, pgid, title, model, context_tokens_used, created_at, \
        updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, NULL, NULL, NULL, NULL, NULL, ?6, ?7)",
+             VALUES (?1, ?2, ?3, ?4, ?5, NULL, NULL, NULL, ?6, NULL, ?7, ?8)",
     )
     .bind(record.id.to_string())
     .bind(agent_kind_to_sql(record.agent_kind))
     .bind(project_id.to_string())
     .bind(&record.cwd)
     .bind(record.status.as_str())
+    .bind(&record.model)
     .bind(record.created_at.unix_timestamp())
     .bind(record.updated_at.unix_timestamp())
     .execute(&self.pool)
@@ -726,7 +737,8 @@ impl Store {
   pub async fn get_settings(&self) -> Result<SettingsRecord, StoreError> {
     let row = sqlx::query(
       "SELECT interface_font, interface_font_size, mono_font, mono_font_size, \
-       time_format, code_theme, updated_at FROM settings WHERE id = 1",
+       time_format, code_theme, model, reasoning_effort, updated_at FROM settings WHERE \
+       id = 1",
     )
     .fetch_optional(&self.pool)
     .await?;
@@ -738,8 +750,8 @@ impl Store {
     let now = OffsetDateTime::now_utc();
     sqlx::query(
       "INSERT INTO settings (id, interface_font, interface_font_size, mono_font, \
-       mono_font_size, time_format, code_theme, updated_at)
-             VALUES (1, NULL, NULL, NULL, NULL, NULL, NULL, ?1)
+       mono_font_size, time_format, code_theme, model, reasoning_effort, updated_at)
+             VALUES (1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?1)
              ON CONFLICT(id) DO NOTHING",
     )
     .bind(now.unix_timestamp())
@@ -753,6 +765,8 @@ impl Store {
       mono_font_size: None,
       time_format: None,
       code_theme: None,
+      model: None,
+      reasoning_effort: None,
       updated_at: now,
     })
   }
@@ -775,18 +789,20 @@ impl Store {
       mono_font_size: patch.mono_font_size.unwrap_or(current.mono_font_size),
       time_format: patch.time_format.unwrap_or(current.time_format),
       code_theme: patch.code_theme.unwrap_or(current.code_theme),
+      model: patch.model.unwrap_or(current.model),
+      reasoning_effort: patch.reasoning_effort.unwrap_or(current.reasoning_effort),
       updated_at: OffsetDateTime::now_utc(),
     };
 
     sqlx::query(
       "INSERT INTO settings (id, interface_font, interface_font_size, mono_font, \
-       mono_font_size, time_format, code_theme, updated_at)
-             VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7)
+       mono_font_size, time_format, code_theme, model, reasoning_effort, updated_at)
+             VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
              ON CONFLICT(id) DO UPDATE SET interface_font = excluded.interface_font, \
        interface_font_size = excluded.interface_font_size, mono_font = \
        excluded.mono_font, mono_font_size = excluded.mono_font_size, time_format = \
-       excluded.time_format, code_theme = excluded.code_theme, updated_at = \
-       excluded.updated_at",
+       excluded.time_format, code_theme = excluded.code_theme, model = excluded.model, \
+       reasoning_effort = excluded.reasoning_effort, updated_at = excluded.updated_at",
     )
     .bind(&next.interface_font)
     .bind(&next.interface_font_size)
@@ -794,6 +810,8 @@ impl Store {
     .bind(&next.mono_font_size)
     .bind(&next.time_format)
     .bind(&next.code_theme)
+    .bind(&next.model)
+    .bind(&next.reasoning_effort)
     .bind(next.updated_at.unix_timestamp())
     .execute(&self.pool)
     .await?;
@@ -1085,6 +1103,8 @@ fn row_to_settings(row: &sqlx::sqlite::SqliteRow) -> SettingsRecord {
     mono_font_size: row.get("mono_font_size"),
     time_format: row.get("time_format"),
     code_theme: row.get("code_theme"),
+    model: row.get("model"),
+    reasoning_effort: row.get("reasoning_effort"),
     updated_at: OffsetDateTime::from_unix_timestamp(updated_at)
       .expect("valid updated_at timestamp"),
   }

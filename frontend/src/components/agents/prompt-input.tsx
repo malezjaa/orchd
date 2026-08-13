@@ -211,7 +211,7 @@ export interface PromptAction {
   disabled?: boolean
 }
 
-interface PromptPickerGroup {
+export interface PromptPickerGroup {
   label: string
   value?: string
   options: PromptOption[]
@@ -272,7 +272,7 @@ export interface PromptInputProps extends Omit<
 // multi-line and `Select`'s item text forces `whitespace-nowrap`/`shrink-0`,
 // which pushed long descriptions past the popup edge. Renders nothing when
 // all of its groups are empty.
-function ToolbarGroupPicker({
+export function ToolbarGroupPicker({
   label,
   groups,
   disabled,
@@ -469,7 +469,7 @@ type ModelFilter = { type: "provider"; id: string } | { type: "favorites" }
 
 // Split out from `ToolbarPicker` because models carry provider identity and a
 // favorites feature the other toolbar pickers don't need.
-function ModelPicker({
+export function ModelPicker({
   value,
   onChange,
   options,

@@ -261,13 +261,8 @@ export function useWriteFileContents() {
 export function useCreateSession() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({
-      agentKind,
-      projectId,
-    }: {
-      agentKind: AgentKind
-      projectId: string
-    }) => api.createSession(agentKind, projectId),
+    mutationFn: ({ projectId }: { projectId: string }) =>
+      api.createSession(projectId),
     onSuccess: (record) => {
       queryClient.setQueryData<SessionRecord[]>(
         queryKeys.sessions,

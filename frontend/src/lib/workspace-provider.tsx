@@ -1,10 +1,5 @@
 import { useCallback, useMemo, useState, type ReactNode } from "react"
-import {
-  basename,
-  type AgentKind,
-  type ProjectRecord,
-  type SessionRecord,
-} from "@/lib/orchd"
+import { basename, type ProjectRecord, type SessionRecord } from "@/lib/orchd"
 import { useArchivedSessions, useProjects, useSessions } from "@/lib/queries"
 import {
   WorkspaceContext,
@@ -61,14 +56,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setTreeOpen(true)
     setActiveId(id)
   }, [])
-  const startDraft = useCallback(
-    (project: ProjectRecord, agentKind: AgentKind) => {
-      setActiveId(null)
-      setTreeOpen(false)
-      setDraft({ project, agentKind })
-    },
-    []
-  )
+  const startDraft = useCallback((project: ProjectRecord) => {
+    setActiveId(null)
+    setTreeOpen(false)
+    setDraft({ project })
+  }, [])
   const sessionCreated = useCallback((session: SessionRecord) => {
     setDraft(null)
     setTreeOpen(true)

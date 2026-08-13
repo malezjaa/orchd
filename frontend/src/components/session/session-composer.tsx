@@ -42,6 +42,8 @@ export interface SessionComposerProps {
   onSubmit: (value: string, content?: ContentPart[]) => void
   // Seeds the model picker's initial selection.
   currentModel?: string | null
+  // Seeds the reasoning tier for a draft session from application settings.
+  currentEffort?: ThinkingEffort | null
   currentFastMode?: boolean | null
   // Empty or omitted hides the model picker, as in the draft composer
   // before there's a live socket to send commands on.
@@ -187,6 +189,7 @@ export function SessionComposer({
   onStop,
   onSubmit,
   currentModel,
+  currentEffort,
   currentFastMode,
   models = [],
   onModelChange,
@@ -203,7 +206,7 @@ export function SessionComposer({
   )
   const [selectedEffort, setSelectedEffort] = useState<
     ThinkingEffort | undefined
-  >()
+  >(currentEffort ?? undefined)
   const [selectedFastMode, setSelectedFastMode] = useState(
     currentFastMode ?? false
   )
@@ -211,6 +214,10 @@ export function SessionComposer({
   useEffect(() => {
     setSelectedModel(currentModel ?? undefined)
   }, [currentModel])
+
+  useEffect(() => {
+    setSelectedEffort(currentEffort ?? undefined)
+  }, [currentEffort])
 
   useEffect(() => {
     setSelectedFastMode(currentFastMode ?? false)

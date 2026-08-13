@@ -13,8 +13,22 @@ import {
   TIME_FORMAT_OPTIONS,
 } from "@/lib/appearance"
 import { CODE_THEME_OPTIONS, resolveCodeTheme } from "@/lib/code-themes"
-import { APP_VERSION } from "@/lib/orchd"
-import { useSettings, useUpdateSettings } from "@/lib/queries"
+import {
+  ModelPicker,
+  ToolbarGroupPicker,
+  type PromptModelOption,
+  type PromptOption,
+} from "@/components/agents/prompt-input"
+import {
+  APP_VERSION,
+  DEFAULT_ANTHROPIC_MODEL,
+  DEFAULT_REASONING_EFFORT,
+  formatContextSize,
+  MODEL_PROVIDER_LABEL,
+  MODEL_PROVIDER_ICON,
+  type ThinkingEffort,
+} from "@/lib/orchd"
+import { useModels, useSettings, useUpdateSettings } from "@/lib/queries"
 import { CodeBlock } from "@/components/agents/code-block"
 import { useTheme } from "@/components/theme-provider"
 import { Dialog, DialogClose, DialogContent } from "@/components/ui/dialog"
@@ -46,9 +60,9 @@ const CATEGORIES: Category[] = [
   {
     id: "general",
     label: "General",
-    description: "About orchd",
+    description: "Model, reasoning, and about orchd",
     icon: <SlidersHorizontal className="size-4" />,
-    keywords: ["about", "version"],
+    keywords: ["about", "version", "model", "reasoning", "thinking"],
   },
   {
     id: "appearance",
@@ -87,8 +101,84 @@ async function seal(event: EventPayload): Promise<void> {
 }`
 
 function GeneralSettings() {
+  const { data: settings } = useSettings()
+  const { data: models = [] } = useModels()
+  const updateSettings = useUpdateSettings()
+  const selectedModel =
+    models.find((model) => model.id === settings?.model) ??
+    models.find((model) => model.id === DEFAULT_ANTHROPIC_MODEL)
+  const selectedEffort =
+    (selectedModel?.supported_reasoning_efforts.includes(
+      settings?.reasoning_effort as ThinkingEffort
+    )
+      ? settings?.reasoning_effort
+      : selectedModel?.default_reasoning_effort) ?? DEFAULT_REASONING_EFFORT
+
+  const modelOptions: PromptModelOption[] = models.map((model) => {
+    const ProviderIcon = MODEL_PROVIDER_ICON[model.provider]
+    return {
+      value: model.id,
+      label: model.display_name,
+      description: `${formatContextSize(model.context_window)} context`,
+      provider: model.provider,
+      providerLabel: MODEL_PROVIDER_LABEL[model.provider],
+      providerIcon: <ProviderIcon />,
+    }
+  })
+  const effortOptions: PromptOption[] = (
+    selectedModel?.supported_reasoning_efforts ?? [DEFAULT_REASONING_EFFORT]
+  ).map((effort) => ({
+    value: effort,
+    label:
+      effort === "xhigh"
+        ? "Extra high"
+        : effort[0].toUpperCase() + effort.slice(1),
+  }))
+
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col gap-6">
+      <div className="flex flex-col gap-3">
+        <span className="text-sm font-medium">New session defaults</span>
+        <SettingRow title="Model">
+          <ModelPicker
+            value={selectedModel?.id ?? DEFAULT_ANTHROPIC_MODEL}
+            options={modelOptions}
+            disabled={updateSettings.isPending || models.length === 0}
+            onChange={(model) => {
+              const nextModel = models.find(
+                (candidate) => candidate.id === model
+              )
+              const effort = nextModel?.supported_reasoning_efforts.includes(
+                settings?.reasoning_effort as ThinkingEffort
+              )
+                ? settings?.reasoning_effort
+                : nextModel?.default_reasoning_effort
+              updateSettings.mutate({
+                model,
+                reasoning_effort: effort ?? DEFAULT_REASONING_EFFORT,
+              })
+            }}
+          />
+        </SettingRow>
+        <SettingRow title="Reasoning tier">
+          <ToolbarGroupPicker
+            label="Reasoning"
+            groups={[
+              {
+                label: "Reasoning",
+                value: selectedEffort,
+                options: effortOptions,
+                onChange: (reasoning_effort) =>
+                  updateSettings.mutate({
+                    reasoning_effort: reasoning_effort as ThinkingEffort,
+                  }),
+              },
+            ]}
+            disabled={updateSettings.isPending || models.length === 0}
+          />
+        </SettingRow>
+      </div>
+
       <div className="mt-auto flex items-center gap-3 border-t border-border pt-4">
         <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted/60 text-muted-foreground">
           <Info className="size-4" />
