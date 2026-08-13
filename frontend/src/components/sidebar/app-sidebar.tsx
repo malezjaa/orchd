@@ -8,7 +8,6 @@ import {
   AnimatedSidebarRail,
   useAnimatedSidebarPanel,
 } from "@/components/motion/animated-sidebar.tsx"
-import { ProjectTreePanel } from "@/components/session/project-tree.tsx"
 import { SessionList } from "@/components/sidebar/session-list.tsx"
 import { useArchivedSessions } from "@/lib/queries.ts"
 import { TooltipIcon } from "@/components/tooltip-icon.tsx"
@@ -46,10 +45,6 @@ export function AppSidebar() {
     sessionDeleted,
     openNewSession,
     setNewProjectOpen,
-    treeOpen,
-    treeRoot,
-    treeTitle,
-    closeTree,
   } = useWorkspace()
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
@@ -65,30 +60,22 @@ export function AppSidebar() {
       panelClassName="h-full bg-sidebar text-sidebar-foreground"
     >
       <AnimatedSidebarContent className="gap-4 overflow-hidden px-2 py-4">
-        {treeOpen && treeRoot ? (
-          <ProjectTreePanel
-            rootPath={treeRoot}
-            title={treeTitle}
-            onBack={closeTree}
-          />
-        ) : (
-          <SessionList
-            sessions={historyOnly ? (archivedSessions.data ?? []) : sessions}
-            projects={projects}
-            activeId={activeId}
-            onSelect={selectSession}
-            onDeleted={sessionDeleted}
-            searchOpen={searchOpen}
-            searchQuery={searchQuery}
-            onSearchQueryChange={setSearchQuery}
-            loading={historyOnly ? archivedSessions.isLoading : sessionsLoading}
-            onCreate={openNewSession}
-            onToggleSearch={() => setSearchOpen((open) => !open)}
-            onCreateProject={() => setNewProjectOpen(true)}
-            historyOnly={historyOnly}
-            onToggleHistory={() => setHistoryOnly((only) => !only)}
-          />
-        )}
+        <SessionList
+          sessions={historyOnly ? (archivedSessions.data ?? []) : sessions}
+          projects={projects}
+          activeId={activeId}
+          onSelect={selectSession}
+          onDeleted={sessionDeleted}
+          searchOpen={searchOpen}
+          searchQuery={searchQuery}
+          onSearchQueryChange={setSearchQuery}
+          loading={historyOnly ? archivedSessions.isLoading : sessionsLoading}
+          onCreate={openNewSession}
+          onToggleSearch={() => setSearchOpen((open) => !open)}
+          onCreateProject={() => setNewProjectOpen(true)}
+          historyOnly={historyOnly}
+          onToggleHistory={() => setHistoryOnly((only) => !only)}
+        />
       </AnimatedSidebarContent>
 
       <AnimatedSidebarFooter>

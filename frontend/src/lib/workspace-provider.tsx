@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState, type ReactNode } from "react"
-import { basename, type ProjectRecord, type SessionRecord } from "@/lib/orchd"
+import type { ProjectRecord, SessionRecord } from "@/lib/orchd"
 import { useArchivedSessions, useProjects, useSessions } from "@/lib/queries"
 import {
   WorkspaceContext,
@@ -13,12 +13,14 @@ const DRAFT_VIEW_KEY = "__draft__"
 
 interface SessionViewState {
   openedFiles: string[]
+  expandedTreePaths: string[]
   currentTab: CurrentTab
 }
 
 function createSessionView(): SessionViewState {
   return {
     openedFiles: [],
+    expandedTreePaths: [],
     currentTab: { type: "session" },
   }
 }
@@ -29,7 +31,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const { data: archivedSessions = [] } = useArchivedSessions(true)
   const [activeId, setActiveId] = useState<string | null>(null)
   const [draft, setDraft] = useState<DraftSession | null>(null)
-  const [treeOpen, setTreeOpen] = useState(false)
   const [sessionViews, setSessionViews] = useState<
     Record<string, SessionViewState>
   >({})
@@ -45,25 +46,20 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       null)
     : null
   const treeRoot = activeProject?.path ?? activeSession?.cwd ?? null
-  const treeTitle =
-    activeProject?.name ?? (activeSession ? basename(activeSession.cwd) : "")
   const viewKey = activeId ?? (draft ? DRAFT_VIEW_KEY : EMPTY_VIEW_KEY)
-  const { currentTab, openedFiles } =
+  const { currentTab, openedFiles, expandedTreePaths } =
     sessionViews[viewKey] ?? createSessionView()
 
   const selectSession = useCallback((id: string) => {
     setDraft(null)
-    setTreeOpen(true)
     setActiveId(id)
   }, [])
   const startDraft = useCallback((project: ProjectRecord) => {
     setActiveId(null)
-    setTreeOpen(false)
     setDraft({ project })
   }, [])
   const sessionCreated = useCallback((session: SessionRecord) => {
     setDraft(null)
-    setTreeOpen(true)
     setActiveId(session.id)
   }, [])
   const sessionDeleted = useCallback(
@@ -77,7 +73,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       if (activeId !== id) return
       setActiveId(null)
       setDraft(null)
-      setTreeOpen(false)
     },
     [activeId]
   )
@@ -92,7 +87,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
         return {
           ...views,
-          [viewKey]: { openedFiles: opened, currentTab: tab },
+          [viewKey]: { ...current, openedFiles: opened, currentTab: tab },
         }
       })
     },
@@ -105,6 +100,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         return {
           ...views,
           [viewKey]: {
+            ...current,
             openedFiles: current.openedFiles.filter(
               (openFile) => openFile !== file
             ),
@@ -119,7 +115,28 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     },
     [viewKey]
   )
-  const closeTree = useCallback(() => setTreeOpen(false), [])
+  const setExpandedTreePaths = useCallback(
+    (paths: readonly string[]) => {
+      setSessionViews((views) => {
+        const current = views[viewKey] ?? createSessionView()
+        const nextPaths = [...paths]
+        if (
+          current.expandedTreePaths.length === nextPaths.length &&
+          current.expandedTreePaths.every(
+            (path, index) => path === nextPaths[index]
+          )
+        ) {
+          return views
+        }
+
+        return {
+          ...views,
+          [viewKey]: { ...current, expandedTreePaths: nextPaths },
+        }
+      })
+    },
+    [viewKey]
+  )
   const openNewSession = useCallback(() => setNewSessionOpen(true), [])
   const closeNewSession = useCallback(() => setNewSessionOpen(false), [])
 
@@ -131,20 +148,19 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       activeId,
       activeSession,
       draft,
-      treeOpen,
       treeRoot,
-      treeTitle,
       currentTab,
       openedFiles,
+      expandedTreePaths,
       newSessionOpen,
       newProjectOpen,
       selectSession,
       startDraft,
       sessionCreated,
       sessionDeleted,
-      closeTree,
       switchActiveTab,
       closeFile,
+      setExpandedTreePaths,
       openNewSession,
       closeNewSession,
       setNewProjectOpen,
@@ -156,20 +172,19 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       activeId,
       activeSession,
       draft,
-      treeOpen,
       treeRoot,
-      treeTitle,
       currentTab,
       openedFiles,
+      expandedTreePaths,
       newSessionOpen,
       newProjectOpen,
       selectSession,
       startDraft,
       sessionCreated,
       sessionDeleted,
-      closeTree,
       switchActiveTab,
       closeFile,
+      setExpandedTreePaths,
       openNewSession,
       closeNewSession,
     ]

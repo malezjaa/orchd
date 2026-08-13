@@ -14,20 +14,19 @@ export interface WorkspaceContextValue {
   activeId: string | null
   activeSession: SessionRecord | null
   draft: DraftSession | null
-  treeOpen: boolean
   treeRoot: string | null
-  treeTitle: string
   currentTab: CurrentTab
   openedFiles: string[]
+  expandedTreePaths: string[]
   newSessionOpen: boolean
   newProjectOpen: boolean
   selectSession: (id: string) => void
   startDraft: (project: ProjectRecord) => void
   sessionCreated: (session: SessionRecord) => void
   sessionDeleted: (id: string) => void
-  closeTree: () => void
   switchActiveTab: (tab: CurrentTab) => void
   closeFile: (file: string) => void
+  setExpandedTreePaths: (paths: readonly string[]) => void
   openNewSession: () => void
   closeNewSession: () => void
   setNewProjectOpen: (open: boolean) => void

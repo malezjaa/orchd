@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
-import { Cpu, GitBranch, Loader2, SquareTerminal } from "lucide-react"
+import { Cpu, Files, GitBranch, Loader2, SquareTerminal } from "lucide-react"
 import { TooltipIcon } from "@/components/tooltip-icon.tsx"
 import { EASE_DRAWER } from "@/lib/ease.ts"
 import { cn } from "@/lib/utils.ts"
+import { basename } from "@/lib/orchd"
+import { ProjectTreePanel } from "@/components/session/project-tree.tsx"
 import { GitPanel } from "./git-panel.tsx"
 import { ProcessesPanel } from "./processes-panel.tsx"
 import { TerminalPanel } from "./terminal-panel.tsx"
@@ -48,6 +50,19 @@ function DeferredGitPanel({ rootPath }: { rootPath: string }) {
 }
 
 const RAIL_ACTIONS: RailAction[] = [
+  {
+    id: "files",
+    label: "Files",
+    icon: (p) => <Files className={p.className} />,
+    render: (sessionId, rootPath) =>
+      rootPath ? (
+        <ProjectTreePanel
+          key={sessionId ?? rootPath}
+          rootPath={rootPath}
+          title={basename(rootPath)}
+        />
+      ) : null,
+  },
   {
     id: "git",
     label: "Git",
@@ -106,7 +121,7 @@ export function SessionIconRail({
   sessionId: string | null
   rootPath: string | null
 }) {
-  const [active, setActive] = useState<string | null>(null)
+  const [active, setActive] = useState<string | null>("files")
   const [width, setWidthState] = useState(getStoredPanelWidth)
   const [resizing, setResizing] = useState(false)
   const reduce = useReducedMotion() ?? false
