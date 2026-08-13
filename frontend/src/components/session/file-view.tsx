@@ -20,7 +20,13 @@ import { parseDiffFromFile } from "@pierre/diffs"
 import { Editor, type EditorOptions } from "@pierre/diffs/edit"
 import { CodeView, EditProvider } from "@pierre/diffs/react"
 import { Button } from "@/components/ui/button"
-import { useFileContents, useWriteFileContents } from "@/lib/queries"
+import { useTheme } from "@/components/theme-provider"
+import { resolveCodeTheme } from "@/lib/code-themes"
+import {
+  useCodeTheme,
+  useFileContents,
+  useWriteFileContents,
+} from "@/lib/queries"
 import { cn } from "@/lib/utils.ts"
 import { getFileIcon } from "@/lib/file-icon.tsx"
 
@@ -29,7 +35,6 @@ import { getFileIcon } from "@/lib/file-icon.tsx"
 const SAVE_DEBOUNCE_MS = 700
 
 const CODE_VIEW_OPTIONS = {
-  theme: { dark: "pierre-dark", light: "pierre-light" },
   disableFileHeader: true,
   diffIndicators: "bars",
   expandUnchanged: true,
@@ -57,6 +62,8 @@ export function FileView({
   file: string
   fullPath: string
 }) {
+  const { resolvedTheme } = useTheme()
+  const codeTheme = resolveCodeTheme(useCodeTheme())
   const fileQuery = useFileContents(cwd, fullPath)
   const writeFile = useWriteFileContents()
 
@@ -204,7 +211,7 @@ export function FileView({
       mutationObserver.disconnect()
       themeMutationObserver?.disconnect()
     }
-  }, [editing, fileQuery.data, showDiff, version])
+  }, [editing, fileQuery.data, resolvedTheme, showDiff, version])
 
   // Keep the viewport position while CodeView swaps a file item for a diff
   // item. The viewer remains mounted, but its internal content is replaced.
@@ -384,8 +391,13 @@ export function FileView({
   )
 
   const codeViewOptions = useMemo(
-    () => ({ ...CODE_VIEW_OPTIONS, diffStyle }),
-    [diffStyle]
+    () => ({
+      ...CODE_VIEW_OPTIONS,
+      diffStyle,
+      theme: codeTheme.fileViewer,
+      themeType: resolvedTheme,
+    }),
+    [codeTheme, diffStyle, resolvedTheme]
   )
 
   const Icon = getFileIcon(file)
@@ -395,7 +407,7 @@ export function FileView({
       ref={viewerShellRef}
       className="flex h-full min-h-0 min-w-0 flex-1 flex-col"
     >
-      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border px-2">
+      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border bg-card/95 px-2 shadow-sm">
         <span className="grid size-4 shrink-0 place-items-center">
           <Icon className="size-3.5" aria-hidden />
         </span>
@@ -421,7 +433,7 @@ export function FileView({
               aria-pressed={editing}
               onClick={toggleEditing}
               className={cn(
-                "h-7 gap-1.5 rounded-lg px-2.5 text-[11px] shadow-none transition-[background-color,border-color,color,transform] duration-150 hover:!border-foreground/40 hover:!bg-muted/70 hover:!text-foreground active:scale-[0.97]",
+                "h-7 gap-1.5 rounded-lg !border-border !bg-background px-2.5 text-[11px] shadow-sm transition-[background-color,border-color,color,transform] duration-150 hover:!border-foreground/40 hover:!bg-muted hover:!text-foreground active:scale-[0.97]",
                 editing &&
                   "!border-foreground !bg-foreground font-semibold !text-background hover:!bg-foreground/90 hover:!text-background"
               )}
@@ -446,7 +458,7 @@ export function FileView({
             <div
               role="group"
               aria-label="File view"
-              className="flex items-center rounded-lg border border-border/70 bg-muted/40 p-0.5 shadow-sm"
+              className="flex items-center rounded-lg border border-border bg-background p-0.5 shadow-sm"
             >
               <Button
                 type="button"
@@ -461,7 +473,7 @@ export function FileView({
                 }
                 onClick={() => setDiffVisibility(false)}
                 className={cn(
-                  "h-6 rounded-md border-0 px-2.5 text-[11px] text-muted-foreground shadow-none transition-[background-color,color,transform] duration-150 hover:!bg-muted/70 hover:!text-foreground active:scale-[0.97]",
+                  "h-6 rounded-md border-0 px-2.5 text-[11px] text-muted-foreground shadow-none transition-[background-color,color,transform] duration-150 hover:!bg-muted hover:!text-foreground active:scale-[0.97]",
                   !showDiff &&
                     "!bg-foreground !text-background shadow-sm hover:!bg-foreground/90 hover:!text-background"
                 )}
@@ -483,7 +495,7 @@ export function FileView({
                 }
                 onClick={() => setDiffVisibility(true)}
                 className={cn(
-                  "h-6 rounded-md border-0 px-2.5 text-[11px] text-muted-foreground shadow-none transition-[background-color,color,transform] duration-150 hover:!bg-muted/70 hover:!text-foreground active:scale-[0.97]",
+                  "h-6 rounded-md border-0 px-2.5 text-[11px] text-muted-foreground shadow-none transition-[background-color,color,transform] duration-150 hover:!bg-muted hover:!text-foreground active:scale-[0.97]",
                   showDiff &&
                     "!bg-foreground !text-background shadow-sm hover:!bg-foreground/90 hover:!text-background"
                 )}
@@ -494,7 +506,7 @@ export function FileView({
             <div
               role="group"
               aria-label="Diff layout"
-              className="flex items-center gap-0.5 rounded-lg border border-border/70 bg-muted/40 p-0.5 shadow-sm"
+              className="flex items-center gap-0.5 rounded-lg border border-border bg-background p-0.5 shadow-sm"
             >
               <Button
                 type="button"
@@ -505,7 +517,7 @@ export function FileView({
                 title="Unified diff"
                 onClick={() => setDiffStyle("unified")}
                 className={cn(
-                  "rounded-md border-0 text-muted-foreground shadow-none transition-[background-color,color,transform] duration-150 hover:!bg-muted/70 hover:!text-foreground active:scale-[0.93]",
+                  "rounded-md border-0 text-muted-foreground shadow-none transition-[background-color,color,transform] duration-150 hover:!bg-muted hover:!text-foreground active:scale-[0.93]",
                   diffStyle === "unified" &&
                     "!bg-foreground !text-background shadow-sm hover:!bg-foreground/90 hover:!text-background"
                 )}
@@ -521,7 +533,7 @@ export function FileView({
                 title="Split diff"
                 onClick={() => setDiffStyle("split")}
                 className={cn(
-                  "rounded-md border-0 text-muted-foreground shadow-none transition-[background-color,color,transform] duration-150 hover:!bg-muted/70 hover:!text-foreground active:scale-[0.93]",
+                  "rounded-md border-0 text-muted-foreground shadow-none transition-[background-color,color,transform] duration-150 hover:!bg-muted hover:!text-foreground active:scale-[0.93]",
                   diffStyle === "split" &&
                     "!bg-foreground !text-background shadow-sm hover:!bg-foreground/90 hover:!text-background"
                 )}
