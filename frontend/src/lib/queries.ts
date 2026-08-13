@@ -161,6 +161,16 @@ export function useProjectTree(path: string | undefined, enabled: boolean) {
   })
 }
 
+export function useGitStatus(path: string | undefined, enabled: boolean) {
+  const token = useAuthToken()
+  return useQuery({
+    queryKey: ["git-status", path ?? "__none__"],
+    queryFn: () => api.gitStatus(path as string),
+    enabled: enabled && token !== null && Boolean(path),
+    staleTime: 10_000,
+  })
+}
+
 export function useFileContents(cwd: string | null, file: string | null) {
   const token = useAuthToken()
   return useQuery({
@@ -193,6 +203,7 @@ export function useWriteFileContents() {
         (old) => ({ current: contents, old: old?.old ?? null })
       )
       queryClient.invalidateQueries({ queryKey: ["fs-tree", cwd] })
+      queryClient.invalidateQueries({ queryKey: ["git-status", cwd] })
     },
   })
 }

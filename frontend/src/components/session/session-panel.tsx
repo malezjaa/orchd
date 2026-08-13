@@ -631,7 +631,7 @@ export function SessionPanel({
           )}
         </div>
 
-        <SessionIconRail sessionId={session.id} />
+        <SessionIconRail sessionId={session.id} rootPath={fileTreeRoot} />
       </div>
     </div>
   )

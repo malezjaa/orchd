@@ -218,7 +218,7 @@ enum GitStatus {
 }
 
 #[derive(Serialize)]
-struct GitStatusEntry {
+pub struct GitStatusEntry {
   path: String,
   status: GitStatus,
 }
@@ -349,6 +349,21 @@ pub struct FileTreeResponse {
   pub git: Option<Vec<GitStatusEntry>>,
 }
 
+#[derive(Serialize)]
+pub struct GitStatusResponse {
+  pub path: String,
+  pub git: Option<Vec<GitStatusEntry>>,
+}
+
+pub async fn git_status_response(
+  Query(query): Query<BrowseFsQuery>,
+) -> Result<Json<GitStatusResponse>, ApiError> {
+  let canonical = resolve_dir(query.path).await?;
+  let git = git_status(&canonical).await;
+
+  Ok(Json(GitStatusResponse { path: canonical.to_string_lossy().into_owned(), git }))
+}
+
 pub async fn file_tree(
   Query(query): Query<BrowseFsQuery>,
 ) -> Result<Json<FileTreeResponse>, ApiError> {
@@ -414,15 +429,43 @@ pub async fn file_contents(
   let (canonical_path, canonical_cwd) = {
     let (path, cwd) = (query.path.clone(), query.cwd.clone());
     tokio::task::spawn_blocking(move || -> Result<(PathBuf, PathBuf), ApiError> {
-      let canonical_path = std::fs::canonicalize(&path)
-        .map_err(|err| ApiError::bad_request(format!("cannot open file: {err}")))?;
-      if canonical_path.is_dir() {
-        return Err(ApiError::bad_request("path is not a file"));
-      }
       let canonical_cwd = std::fs::canonicalize(&cwd)
         .map_err(|err| ApiError::bad_request(format!("cannot open cwd: {err}")))?;
       if !canonical_cwd.is_dir() {
         return Err(ApiError::bad_request("cwd is not a directory"));
+      }
+
+      // A deleted file cannot be canonicalized because its final path no
+      // longer exists. Canonicalize its parent instead so a git diff can
+      // still show the HEAD version. Existing files keep the stricter full
+      // canonicalization, including symlink resolution.
+      let requested = PathBuf::from(&path);
+      let requested =
+        if requested.is_absolute() { requested } else { canonical_cwd.join(requested) };
+      let canonical_path = match std::fs::canonicalize(&requested) {
+        Ok(path) => path,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+          let parent = requested
+            .parent()
+            .ok_or_else(|| ApiError::bad_request("file path has no parent"))?;
+          let file_name = requested
+            .file_name()
+            .ok_or_else(|| ApiError::bad_request("file path has no name"))?;
+          std::fs::canonicalize(parent)
+            .map_err(|parent_err| {
+              ApiError::bad_request(format!("cannot open file parent: {parent_err}"))
+            })?
+            .join(file_name)
+        }
+        Err(err) => {
+          return Err(ApiError::bad_request(format!("cannot open file: {err}")));
+        }
+      };
+      if canonical_path.is_dir() {
+        return Err(ApiError::bad_request("path is not a file"));
+      }
+      if !canonical_path.starts_with(&canonical_cwd) {
+        return Err(ApiError::bad_request("path is outside the workspace"));
       }
       Ok((canonical_path, canonical_cwd))
     })
@@ -434,6 +477,13 @@ pub async fn file_contents(
     let canonical_path = canonical_path.clone();
     tokio::task::spawn_blocking(move || {
       read_to_string(&canonical_path)
+        .or_else(|err| {
+          if err.kind() == std::io::ErrorKind::NotFound {
+            Ok(String::new())
+          } else {
+            Err(err)
+          }
+        })
         .map_err(|err| ApiError::bad_request(format!("failed to read file: {err}")))
     })
   };

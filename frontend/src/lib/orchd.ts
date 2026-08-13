@@ -130,6 +130,11 @@ export interface FileTreeResponse {
   git: GitStatusEntry[] | null
 }
 
+export interface GitStatusResponse {
+  path: string
+  git: GitStatusEntry[] | null
+}
+
 export type ModelProvider = "anthropic" | "open_ai"
 
 export interface ModelInfo {

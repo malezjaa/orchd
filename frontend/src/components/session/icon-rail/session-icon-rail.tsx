@@ -1,9 +1,10 @@
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
-import { GitBranch, SquareTerminal } from "lucide-react"
+import { GitBranch, Loader2, SquareTerminal } from "lucide-react"
 import { TooltipIcon } from "@/components/tooltip-icon.tsx"
 import { EASE_DRAWER } from "@/lib/ease.ts"
 import { cn } from "@/lib/utils.ts"
+import { GitPanel } from "./git-panel.tsx"
 import { TerminalPanel } from "./terminal-panel.tsx"
 
 function GithubIcon({ className }: { className?: string }) {
@@ -23,7 +24,26 @@ interface RailAction {
   id: string
   label: string
   icon: (props: { className?: string }) => React.ReactNode
-  render: (sessionId: string | null) => React.ReactNode
+  render: (sessionId: string | null, rootPath: string | null) => React.ReactNode
+}
+
+function DeferredGitPanel({ rootPath }: { rootPath: string }) {
+  const [ready, setReady] = useState(false)
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => setReady(true))
+    return () => window.cancelAnimationFrame(frame)
+  }, [])
+
+  if (!ready) {
+    return (
+      <div className="grid min-h-0 flex-1 place-items-center text-muted-foreground">
+        <Loader2 className="size-4 animate-spin" />
+      </div>
+    )
+  }
+
+  return <GitPanel rootPath={rootPath} />
 }
 
 const RAIL_ACTIONS: RailAction[] = [
@@ -31,13 +51,14 @@ const RAIL_ACTIONS: RailAction[] = [
     id: "git",
     label: "Git",
     icon: (p) => <GitBranch className={p.className} />,
-    render: () => {},
+    render: (_sessionId, rootPath) =>
+      rootPath ? <DeferredGitPanel rootPath={rootPath} /> : null,
   },
   {
     id: "github",
     label: "GitHub",
     icon: (p) => <GithubIcon className={p.className} />,
-    render: () => {},
+    render: () => null,
   },
   {
     id: "terminal",
@@ -49,8 +70,8 @@ const RAIL_ACTIONS: RailAction[] = [
 ]
 
 const PANEL_MIN_WIDTH = 200
-const PANEL_MAX_WIDTH = 480
-const PANEL_DEFAULT_WIDTH = 288
+const PANEL_MAX_WIDTH = 720
+const PANEL_DEFAULT_WIDTH = 360
 const PANEL_WIDTH_STORAGE_KEY = "session-panel:width"
 
 function clampPanelWidth(width: number) {
@@ -70,7 +91,13 @@ const PANEL_TRANSITION = {
 
 const PANEL_CLOSED = { width: 0, opacity: 0 }
 
-export function SessionIconRail({ sessionId }: { sessionId: string | null }) {
+export function SessionIconRail({
+  sessionId,
+  rootPath,
+}: {
+  sessionId: string | null
+  rootPath: string | null
+}) {
   const [active, setActive] = useState<string | null>(null)
   const [width, setWidthState] = useState(getStoredPanelWidth)
   const [resizing, setResizing] = useState(false)
@@ -164,7 +191,7 @@ export function SessionIconRail({ sessionId }: { sessionId: string | null }) {
               </p>
             </div>
             <div className="grid min-h-0 flex-1 border-l border-border">
-              {activeAction.render(sessionId) ?? (
+              {activeAction.render(sessionId, rootPath) ?? (
                 <p
                   className="m-auto max-w-[200px] px-4 py-6 text-center text-xs text-muted-foreground"
                   id={`${activeAction.label}-panel`}

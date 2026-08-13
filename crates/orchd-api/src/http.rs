@@ -12,7 +12,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
   error::ApiError,
-  file_tree::{browse_fs, file_contents, file_tree, write_file_contents},
+  file_tree::{
+    browse_fs, file_contents, file_tree, git_status_response, write_file_contents,
+  },
   state::AppState,
 };
 
@@ -36,6 +38,7 @@ pub fn router() -> Router<AppState> {
     .route("/projects/{id}/archive", post(archive_project))
     .route("/projects/{id}/sessions", get(list_project_sessions))
     .route("/fs/browse", get(browse_fs))
+    .route("/fs/git-status", get(git_status_response))
     .route("/fs/tree", get(file_tree))
     .route("/fs/contents", get(file_contents).put(write_file_contents))
     .route("/models", get(list_models))

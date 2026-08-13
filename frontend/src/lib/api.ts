@@ -9,6 +9,7 @@ import type {
   FileContentsResponse,
   FileTreeResponse,
   FsBrowseResponse,
+  GitStatusResponse,
   ModelInfo,
   ProjectRecord,
   SessionRecord,
@@ -140,6 +141,11 @@ export const api = {
 
   fileTree: (path: string) =>
     request<FileTreeResponse>(`/fs/tree?path=${encodeURIComponent(path)}`),
+
+  gitStatus: (path: string) =>
+    request<GitStatusResponse>(
+      `/fs/git-status?path=${encodeURIComponent(path)}`
+    ),
 
   listModels: () => request<ModelInfo[]>("/models"),
 
