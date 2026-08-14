@@ -538,7 +538,10 @@ impl Translator for ClaudeCodeTranslator {
       | SessionCommand::Close { .. }
       | SessionCommand::RenameTitle { .. }
       | SessionCommand::RegenerateTitle
-      | SessionCommand::TitleGenerationCompleted { .. } => Ok(vec![]),
+      | SessionCommand::TitleGenerationCompleted { .. }
+      | SessionCommand::SendSubagentInput { .. }
+      | SessionCommand::InterruptSubagent { .. }
+      | SessionCommand::InspectSubagent { .. } => Ok(vec![]),
     }
   }
 
@@ -675,6 +678,7 @@ mod tests {
         resume: true,
         native_permissions: true,
         skills: true,
+        subagents: false,
       },
       None,
       PathBuf::from("/tmp"),

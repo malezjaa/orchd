@@ -2,11 +2,7 @@
 
 import { Image as ImageIcon } from "lucide-react"
 import { useState } from "react"
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 
 export interface ImageMentionProps {
@@ -16,7 +12,11 @@ export interface ImageMentionProps {
 }
 
 /** A compact image reference. The source is only displayed in the lightbox. */
-export function ImageMention({ src, name = "image", className }: ImageMentionProps) {
+export function ImageMention({
+  src,
+  name = "image",
+  className,
+}: ImageMentionProps) {
   const [open, setOpen] = useState(false)
 
   return (
@@ -27,7 +27,7 @@ export function ImageMention({ src, name = "image", className }: ImageMentionPro
         aria-label={`Open image ${name}`}
         onClick={() => setOpen(true)}
         className={cn(
-          "not-typeset mx-0.5 inline-flex max-w-full translate-y-0.5 items-center gap-1 rounded-md border border-violet-500/30 bg-violet-500/10 px-1.5 py-0.5 align-baseline font-mono text-[0.85em] leading-none text-violet-700 transition-colors hover:border-violet-500/50 hover:bg-violet-500/15 hover:text-violet-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/40 active:scale-[0.98] dark:border-violet-400/30 dark:bg-violet-400/10 dark:text-violet-300 dark:hover:border-violet-400/50 dark:hover:bg-violet-400/15 dark:hover:text-violet-200",
+          "not-typeset mx-0.5 inline-flex max-w-full translate-y-0.5 items-center gap-1 rounded-md border border-violet-500/30 bg-violet-500/10 px-1.5 py-0.5 align-baseline font-mono text-[0.85em] leading-none text-violet-700 transition-colors hover:border-violet-500/50 hover:bg-violet-500/15 hover:text-violet-800 focus-visible:ring-2 focus-visible:ring-violet-500/40 focus-visible:outline-none active:scale-[0.98] dark:border-violet-400/30 dark:bg-violet-400/10 dark:text-violet-300 dark:hover:border-violet-400/50 dark:hover:bg-violet-400/15 dark:hover:text-violet-200",
           className
         )}
       >

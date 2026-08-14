@@ -170,6 +170,7 @@ impl SessionActor {
             resume: false,
             native_permissions: false,
             skills: false,
+            subagents: false,
           },
         },
         init_turn,
@@ -234,7 +235,10 @@ impl SessionActor {
       SessionCommand::ResolveApproval { .. }
       | SessionCommand::UpdatePolicy(_)
       | SessionCommand::SetMode { .. }
-      | SessionCommand::SetModel { .. } => false,
+      | SessionCommand::SetModel { .. }
+      | SessionCommand::SendSubagentInput { .. }
+      | SessionCommand::InterruptSubagent { .. }
+      | SessionCommand::InspectSubagent { .. } => false,
       SessionCommand::Close { reason } => {
         self.finish(reason).await;
         true
@@ -357,6 +361,17 @@ impl SessionActor {
     };
     let spawn_spec = adapter.spawn_spec(&launch);
     let mut translator = adapter.translator(&launch);
+    match self.store.list_subagents(self.id).await {
+      Ok(records) => {
+        for record in records {
+          translator
+            .restore_subagent(&record.thread_id, record.active_turn_id.as_deref());
+        }
+      }
+      Err(err) => {
+        tracing::debug!(session = %self.id, error = %err, "failed to restore subagent state");
+      }
+    }
 
     let (mut process, pipes) = match ManagedProcess::spawn(&spawn_spec) {
       Ok(pair) => pair,
@@ -665,6 +680,98 @@ impl SessionActor {
       EventPayload::PermissionRequested(req) => {
         self.intercept_permission(translator, stdin, req).await;
       }
+      EventPayload::SubagentStarted {
+        thread_id,
+        nickname,
+        role,
+        prompt,
+        model,
+        effort,
+        status,
+        can_accept_direct_input,
+        active_turn_id,
+      } => {
+        if let Err(err) = self
+          .store
+          .upsert_subagent(
+            self.id,
+            &thread_id,
+            nickname.as_deref(),
+            role.as_deref(),
+            prompt.as_deref(),
+            model.as_deref(),
+            effort.as_deref(),
+            status.clone(),
+            can_accept_direct_input,
+          )
+          .await
+        {
+          tracing::error!(session = %self.id, thread = %thread_id, error = %err, "failed to persist subagent");
+        }
+        self
+          .emit(
+            EventPayload::SubagentStarted {
+              thread_id,
+              nickname,
+              role,
+              prompt,
+              model,
+              effort,
+              status,
+              can_accept_direct_input,
+              active_turn_id,
+            },
+            self.lifecycle.current_turn(),
+          )
+          .await;
+      }
+      EventPayload::SubagentStatusChanged {
+        thread_id,
+        status,
+        message,
+        can_accept_direct_input,
+        active_turn_id,
+      } => {
+        if let Err(err) = self
+          .store
+          .update_subagent_status(
+            self.id,
+            &thread_id,
+            status.clone(),
+            message.as_deref(),
+            can_accept_direct_input,
+            active_turn_id.as_deref(),
+          )
+          .await
+        {
+          tracing::debug!(session = %self.id, thread = %thread_id, error = %err, "failed to update subagent status");
+        }
+        self
+          .emit(
+            EventPayload::SubagentStatusChanged {
+              thread_id,
+              status,
+              message,
+              can_accept_direct_input,
+              active_turn_id,
+            },
+            self.lifecycle.current_turn(),
+          )
+          .await;
+      }
+      EventPayload::SubagentResult { thread_id, summary } => {
+        if let Err(err) =
+          self.store.set_subagent_result(self.id, &thread_id, &summary).await
+        {
+          tracing::debug!(session = %self.id, thread = %thread_id, error = %err, "failed to persist subagent result");
+        }
+        self
+          .emit(
+            EventPayload::SubagentResult { thread_id, summary },
+            self.lifecycle.current_turn(),
+          )
+          .await;
+      }
       // A clean init means the agent came up, so any crash-recovery streak
       // that led here is over.
       EventPayload::SessionInit { .. } => {
@@ -716,6 +823,9 @@ impl SessionActor {
         self.resolve_approval(translator, stdin, *request_id, decision.clone()).await;
         return false;
       }
+      SessionCommand::SendSubagentInput { .. }
+      | SessionCommand::InterruptSubagent { .. }
+      | SessionCommand::InspectSubagent { .. } => {}
       SessionCommand::UpdatePolicy(patch) => {
         match self.policy.apply_patch(patch) {
           Ok(()) => self.persist_policy().await,

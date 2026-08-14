@@ -1,4 +1,4 @@
-use orchd_core::{AgentKind, ProjectId, SessionId};
+use orchd_core::{AgentKind, ProjectId, SessionId, SubagentStatus};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
@@ -197,6 +197,26 @@ pub struct SessionRecord {
   /// sidebar while retaining their creation order within each group.
   #[serde(with = "time::serde::rfc3339::option")]
   pub pinned_at: Option<OffsetDateTime>,
+  #[serde(with = "time::serde::rfc3339")]
+  pub created_at: OffsetDateTime,
+  #[serde(with = "time::serde::rfc3339")]
+  pub updated_at: OffsetDateTime,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SubagentRecord {
+  pub parent_session_id: SessionId,
+  pub thread_id: String,
+  pub nickname: Option<String>,
+  pub role: Option<String>,
+  pub prompt: Option<String>,
+  pub model: Option<String>,
+  pub effort: Option<String>,
+  pub status: SubagentStatus,
+  pub message: Option<String>,
+  pub summary: Option<String>,
+  pub can_accept_direct_input: Option<bool>,
+  pub active_turn_id: Option<String>,
   #[serde(with = "time::serde::rfc3339")]
   pub created_at: OffsetDateTime,
   #[serde(with = "time::serde::rfc3339")]

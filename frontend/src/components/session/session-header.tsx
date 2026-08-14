@@ -47,7 +47,7 @@ export function SessionHeader({
         />
       ) : null}
       <div className="group/title flex min-w-0 flex-1 items-center gap-1.5">
-        <div className="min-w-0 flex">
+        <div className="flex min-w-0">
           <div className="flex min-w-0 flex-col gap-0.5">
             {titleRegenerating ? (
               <div className="flex h-5 items-center">

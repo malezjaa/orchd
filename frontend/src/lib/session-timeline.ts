@@ -8,6 +8,7 @@ import type {
   ContentPart,
   PermissionKind,
   SessionEvent,
+  SubagentRecord,
   ToolOutput,
   ToolRef,
 } from "@/lib/orchd"
@@ -38,6 +39,13 @@ export interface SessionInsights {
   longestTool: LongestTool | null
 }
 
+export interface SubagentMessage {
+  id: string
+  role: "user" | "assistant"
+  text: string
+  ts: string
+}
+
 export interface SessionTimelineState {
   events: TimelineEvent[]
   busy: boolean
@@ -51,6 +59,8 @@ export interface SessionTimelineState {
   insights: SessionInsights
   toolStarts: Record<string, { name: string; startedAt: string }>
   costByTurn: Record<string, number | null>
+  subagents: Record<string, SubagentRecord>
+  subagentMessages: Record<string, SubagentMessage[]>
 }
 
 export const initialSessionTimelineState: SessionTimelineState = {
@@ -65,10 +75,18 @@ export const initialSessionTimelineState: SessionTimelineState = {
   },
   toolStarts: {},
   costByTurn: {},
+  subagents: {},
+  subagentMessages: {},
 }
 
 export type SessionTimelineAction =
   | { type: "reset" }
+  | { type: "hydrate_subagents"; records: SubagentRecord[] }
+  | {
+      type: "append_subagent_message"
+      threadId: string
+      message: SubagentMessage
+    }
   // `isLive` is false during resume catch-up. Only live text deltas
   // should typewriter-reveal.
   | { type: "apply_event"; event: SessionEvent; isLive: boolean }
@@ -149,6 +167,165 @@ function toolOutputText(output: ToolOutput): string {
   }
 }
 
+function applySubagentEvent(
+  current: Record<string, SubagentRecord>,
+  event: SessionEvent
+): Record<string, SubagentRecord> {
+  if (event.type === "subagent_started") {
+    const previous = current[event.thread_id]
+    return {
+      ...current,
+      [event.thread_id]: {
+        parent_session_id: event.session_id,
+        thread_id: event.thread_id,
+        nickname: event.nickname,
+        role: event.role,
+        prompt: event.prompt,
+        model: event.model,
+        effort: event.effort,
+        status: event.status,
+        message: previous?.message ?? null,
+        summary: previous?.summary ?? null,
+        can_accept_direct_input: event.can_accept_direct_input,
+        active_turn_id: event.active_turn_id,
+        created_at: previous?.created_at ?? event.ts,
+        updated_at: event.ts,
+      },
+    }
+  }
+  if (event.type === "subagent_status_changed") {
+    const previous = current[event.thread_id]
+    if (!previous) {
+      return {
+        ...current,
+        [event.thread_id]: {
+          parent_session_id: event.session_id,
+          thread_id: event.thread_id,
+          nickname: null,
+          role: null,
+          prompt: null,
+          model: null,
+          effort: null,
+          status: event.status,
+          message: event.message,
+          summary: null,
+          can_accept_direct_input: event.can_accept_direct_input,
+          active_turn_id: event.active_turn_id,
+          created_at: event.ts,
+          updated_at: event.ts,
+        },
+      }
+    }
+    return {
+      ...current,
+      [event.thread_id]: {
+        ...previous,
+        status: event.status,
+        message: event.message ?? previous.message,
+        can_accept_direct_input:
+          event.can_accept_direct_input ?? previous.can_accept_direct_input,
+        active_turn_id: event.active_turn_id ?? previous.active_turn_id,
+        updated_at: event.ts,
+      },
+    }
+  }
+  if (event.type === "subagent_result") {
+    const previous = current[event.thread_id]
+    if (!previous) {
+      return {
+        ...current,
+        [event.thread_id]: {
+          parent_session_id: event.session_id,
+          thread_id: event.thread_id,
+          nickname: null,
+          role: null,
+          prompt: null,
+          model: null,
+          effort: null,
+          status: "completed",
+          message: null,
+          summary: event.summary,
+          can_accept_direct_input: null,
+          active_turn_id: null,
+          created_at: event.ts,
+          updated_at: event.ts,
+        },
+      }
+    }
+    return {
+      ...current,
+      [event.thread_id]: {
+        ...previous,
+        summary: event.summary,
+        updated_at: event.ts,
+      },
+    }
+  }
+  return current
+}
+
+function applySubagentResult(
+  current: Record<string, SubagentMessage[]>,
+  event: Extract<SessionEvent, { type: "subagent_result" }>
+): Record<string, SubagentMessage[]> {
+  const messages = current[event.thread_id] ?? []
+  const last = messages[messages.length - 1]
+
+  // `thread/read` and repeated Codex completion notifications can return the
+  // same bounded, cumulative child summary. Update the existing summary
+  // message instead of rendering another copy.
+  if (last?.role === "assistant") {
+    if (last.text === event.summary) return current
+    if (event.summary.startsWith(last.text)) {
+      return {
+        ...current,
+        [event.thread_id]: [
+          ...messages.slice(0, -1),
+          {
+            ...last,
+            id: `${event.thread_id}:${event.seq}`,
+            text: event.summary,
+            ts: event.ts,
+          },
+        ],
+      }
+    }
+  }
+
+  return {
+    ...current,
+    [event.thread_id]: [
+      ...messages,
+      {
+        id: `${event.thread_id}:${event.seq}`,
+        role: "assistant",
+        text: event.summary,
+        ts: event.ts,
+      },
+    ],
+  }
+}
+
+function applyMentionedSubagentNames(
+  current: Record<string, SubagentRecord>,
+  events: TimelineEvent[]
+): Record<string, SubagentRecord> {
+  const next = { ...current }
+  const pattern = /\[\[subagent:([^|\]\s]+)\|([^\]]+)\]\]/g
+  for (const event of events) {
+    if (event.kind !== "assistant_text") continue
+    pattern.lastIndex = 0
+    let match: RegExpExecArray | null
+    while ((match = pattern.exec(event.text)) !== null) {
+      const agent = next[match[1]]
+      if (agent && !agent.nickname) {
+        next[match[1]] = { ...agent, nickname: match[2].trim() }
+      }
+    }
+  }
+  return next
+}
+
 function permissionParameters(detail: unknown) {
   if (!detail || typeof detail !== "object") return []
   const d = detail as Record<string, unknown>
@@ -192,6 +369,9 @@ function applyEvent(
     case "tool_call_progress":
     case "usage_update":
     case "skill_invoked":
+    case "subagent_started":
+    case "subagent_status_changed":
+    case "subagent_result":
       return events
 
     case "user_message":
@@ -307,9 +487,27 @@ export function sessionTimelineReducer(
     case "reset":
       return initialSessionTimelineState
 
+    case "hydrate_subagents": {
+      const subagents = { ...state.subagents }
+      for (const record of action.records) {
+        // Live/replayed events have fresher sequence ordering than the REST
+        // snapshot. Do not let a slower request overwrite those records.
+        if (!subagents[record.thread_id]) subagents[record.thread_id] = record
+      }
+      return { ...state, subagents }
+    }
+
     case "apply_event": {
       const event = action.event
       const events = applyEvent(state.events, event, action.isLive)
+      const subagents = applyMentionedSubagentNames(
+        applySubagentEvent(state.subagents, event),
+        events
+      )
+      const subagentMessages =
+        event.type === "subagent_result"
+          ? applySubagentResult(state.subagentMessages, event)
+          : state.subagentMessages
       const turnEnded =
         event.type === "turn_completed" || event.type === "session_closed"
       const busy = turnEnded ? false : state.busy
@@ -377,8 +575,22 @@ export function sessionTimelineReducer(
         insights,
         toolStarts,
         costByTurn,
+        subagents,
+        subagentMessages,
       }
     }
+
+    case "append_subagent_message":
+      return {
+        ...state,
+        subagentMessages: {
+          ...state.subagentMessages,
+          [action.threadId]: [
+            ...(state.subagentMessages[action.threadId] ?? []),
+            action.message,
+          ],
+        },
+      }
 
     case "append_user_message":
       return {

@@ -14,6 +14,7 @@ import { ColorSwatch } from "@/components/agents/color-swatch"
 import { FileMention } from "@/components/agents/file-mention"
 import { ImageMention } from "@/components/agents/image-mention"
 import { SkillMention } from "@/components/agents/skill-mention"
+import { SubagentMention } from "@/components/agents/subagent-mention"
 import { parseHexColor } from "@/lib/markdown-color"
 import { parsePathMention } from "@/lib/markdown-path"
 import { cn } from "@/lib/utils"
@@ -25,6 +26,7 @@ export interface AgentMarkdownProps {
   streaming?: boolean
   className?: string
   onFileOpen?: (path: string) => void
+  onSubagentOpen?: (threadId: string) => void
 }
 
 interface TextLikeNode {
@@ -46,6 +48,8 @@ interface MarkdownNode {
 
 const AT_PATH_PATTERN = /(^|[\s([{<'"])(@[\w./-]+)/g
 const SLASH_SKILL_PATTERN = /(^|[\s([{<'"])(\/[A-Za-z0-9][\w-]*)(?![\w/-])/g
+const SUBAGENT_PATTERN =
+  /(^|[\s([{<'"])(\[\[subagent:([^|\]\s]+)\|([^\]]+)\]\])/g
 
 function remarkFileMentions() {
   return (tree: MarkdownNode) => {
@@ -138,6 +142,52 @@ function remarkSkillMentions() {
   }
 }
 
+function remarkSubagentMentions() {
+  return (tree: MarkdownNode) => {
+    const transform = (node: MarkdownNode) => {
+      if (!node.children) return
+
+      const nextChildren: MarkdownNode[] = []
+      for (const child of node.children) {
+        if (child.type !== "text" || !child.value) {
+          transform(child)
+          nextChildren.push(child)
+          continue
+        }
+
+        let cursor = 0
+        let match: RegExpExecArray | null
+        SUBAGENT_PATTERN.lastIndex = 0
+        while ((match = SUBAGENT_PATTERN.exec(child.value)) !== null) {
+          const start = match.index + match[1].length
+          if (start > cursor) {
+            nextChildren.push({
+              type: "text",
+              value: child.value.slice(cursor, start),
+            })
+          }
+          nextChildren.push({
+            type: "inlineCode",
+            value: match[0].slice(match[1].length),
+          })
+          cursor = start + match[0].length - match[1].length
+        }
+
+        if (cursor === 0) nextChildren.push(child)
+        else if (cursor < child.value.length) {
+          nextChildren.push({
+            type: "text",
+            value: child.value.slice(cursor),
+          })
+        }
+      }
+      node.children = nextChildren
+    }
+
+    transform(tree)
+  }
+}
+
 const LANGUAGE_ALIASES: Record<string, AgentCodeLanguage> = {
   ts: "typescript",
   typescript: "typescript",
@@ -170,8 +220,12 @@ function InlineCode({
   className,
   children,
   onFileOpen,
+  onSubagentOpen,
   ...props
-}: CodeProps & { onFileOpen?: (path: string) => void }) {
+}: CodeProps & {
+  onFileOpen?: (path: string) => void
+  onSubagentOpen?: (threadId: string) => void
+}) {
   const text = getNodeText(node)
   const mention = parsePathMention(text)
   if (mention) {
@@ -186,6 +240,16 @@ function InlineCode({
   const skill = /^\/([A-Za-z0-9][\w-]*)$/.exec(text)
   if (skill) {
     return <SkillMention name={skill[1]} />
+  }
+  const subagent = /^\[\[subagent:([^|\]\s]+)\|([^\]]+)\]\]$/.exec(text)
+  if (subagent) {
+    return (
+      <SubagentMention
+        threadId={subagent[1]}
+        name={subagent[2].trim()}
+        onOpen={onSubagentOpen}
+      />
+    )
   }
   const hexColor = parseHexColor(text)
   if (hexColor) {
@@ -218,9 +282,18 @@ function PreBlock({ node }: PreProps) {
   )
 }
 
-function createComponents(onFileOpen?: (path: string) => void): Components {
+function createComponents(
+  onFileOpen?: (path: string) => void,
+  onSubagentOpen?: (threadId: string) => void
+): Components {
   return {
-    code: (props) => <InlineCode {...props} onFileOpen={onFileOpen} />,
+    code: (props) => (
+      <InlineCode
+        {...props}
+        onFileOpen={onFileOpen}
+        onSubagentOpen={onSubagentOpen}
+      />
+    ),
     pre: PreBlock,
     img: ({ alt, src, ...props }) => {
       if (typeof src === "string" && src.startsWith("data:image/")) {
@@ -241,17 +314,26 @@ export const AgentMarkdown = memo(function AgentMarkdown({
   streaming = false,
   className,
   onFileOpen,
+  onSubagentOpen,
 }: AgentMarkdownProps) {
   const content = useMemo(
     () => (streaming ? remend(children) : children),
     [children, streaming]
   )
-  const components = useMemo(() => createComponents(onFileOpen), [onFileOpen])
+  const components = useMemo(
+    () => createComponents(onFileOpen, onSubagentOpen),
+    [onFileOpen, onSubagentOpen]
+  )
 
   return (
     <div className={cn("typeset typeset-docs max-w-none", className)}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkFileMentions, remarkSkillMentions]}
+        remarkPlugins={[
+          remarkGfm,
+          remarkFileMentions,
+          remarkSkillMentions,
+          remarkSubagentMentions,
+        ]}
         components={components}
         urlTransform={transformMarkdownUrl}
       >

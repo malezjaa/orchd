@@ -10,11 +10,7 @@ import {
   useEditor,
 } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
-import {
-  CornerDownLeft,
-  FileCode2,
-  Sparkles,
-} from "lucide-react"
+import { CornerDownLeft, FileCode2, Sparkles } from "lucide-react"
 import {
   type KeyboardEvent,
   type MouseEvent,
@@ -291,9 +287,7 @@ const ImageMentionNode = Node.create({
       return match ? match.index + match[0].length - match[1].length : -1
     },
     tokenize(source: string) {
-      const match = /^!\[([^\]]*)\]\(data:([^;]+);base64,([^)]*)\)/.exec(
-        source
-      )
+      const match = /^!\[([^\]]*)\]\(data:([^;]+);base64,([^)]*)\)/.exec(source)
       if (!match) return undefined
       return {
         type: "imageMention",
@@ -606,7 +600,8 @@ export function PromptEditor({
         onImageErrorRef.current?.(`Could not read ${file.name}`)
       }
     }
-    if (nodes.length) editor.chain().focus().insertContentAt(position, nodes).run()
+    if (nodes.length)
+      editor.chain().focus().insertContentAt(position, nodes).run()
   }
 
   const editor = useEditor(
@@ -636,8 +631,7 @@ export function PromptEditor({
         handlePaste: (_view, event) => {
           const files = Array.from(event.clipboardData?.items ?? [])
             .filter(
-              (item) =>
-                item.kind === "file" && item.type.startsWith("image/")
+              (item) => item.kind === "file" && item.type.startsWith("image/")
             )
             .map((item) => item.getAsFile())
             .filter((file): file is File => file !== null)

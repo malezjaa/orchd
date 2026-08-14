@@ -23,4 +23,27 @@ pub struct AgentCapabilities {
   pub resume: bool,
   pub native_permissions: bool,
   pub skills: bool,
+  #[serde(default)]
+  pub subagents: bool,
+}
+
+#[cfg(test)]
+mod tests {
+  use super::AgentCapabilities;
+
+  #[test]
+  fn older_capabilities_default_subagents_to_disabled() {
+    let capabilities: AgentCapabilities = serde_json::from_str(
+      r#"{
+        "thinking": true,
+        "structured_tools": true,
+        "resume": true,
+        "native_permissions": true,
+        "skills": true
+      }"#,
+    )
+    .expect("legacy capabilities should remain readable");
+
+    assert!(!capabilities.subagents);
+  }
 }

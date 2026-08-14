@@ -389,6 +389,9 @@ export type SessionCommand =
     }
   | { type: "close"; reason: CloseReason }
   | { type: "regenerate_title" }
+  | { type: "send_subagent_input"; thread_id: string; content: ContentPart[] }
+  | { type: "interrupt_subagent"; thread_id: string }
+  | { type: "inspect_subagent"; thread_id: string }
 
 export type StopReason = "end_turn" | "max_tokens" | "interrupted" | "error"
 export type CloseReason = "client_requested" | "idle" | "agent_crash" | "error"
@@ -405,6 +408,33 @@ export interface AgentCapabilities {
   resume: boolean
   native_permissions: boolean
   skills: boolean
+  subagents: boolean
+}
+
+export type SubagentStatus =
+  | "pending"
+  | "running"
+  | "interrupted"
+  | "completed"
+  | "errored"
+  | "shutdown"
+  | "not_found"
+
+export interface SubagentRecord {
+  parent_session_id: string
+  thread_id: string
+  nickname: string | null
+  role: string | null
+  prompt: string | null
+  model: string | null
+  effort: string | null
+  status: SubagentStatus
+  message: string | null
+  summary: string | null
+  can_accept_direct_input: boolean | null
+  active_turn_id: string | null
+  created_at: string
+  updated_at: string
 }
 
 export type EventPayload =
@@ -433,6 +463,27 @@ export type EventPayload =
       is_error: boolean
     }
   | { type: "skill_invoked"; skill: string; args: unknown }
+  | {
+      type: "subagent_started"
+      thread_id: string
+      nickname: string | null
+      role: string | null
+      prompt: string | null
+      model: string | null
+      effort: string | null
+      status: SubagentStatus
+      can_accept_direct_input: boolean | null
+      active_turn_id: string | null
+    }
+  | {
+      type: "subagent_status_changed"
+      thread_id: string
+      status: SubagentStatus
+      message: string | null
+      can_accept_direct_input: boolean | null
+      active_turn_id: string | null
+    }
+  | { type: "subagent_result"; thread_id: string; summary: string }
   | ({ type: "permission_requested" } & PermissionRequest)
   | { type: "permission_resolved"; request_id: string; decision: Decision }
   | {

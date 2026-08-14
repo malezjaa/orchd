@@ -38,6 +38,18 @@ pub enum ErrorScope {
   Transport,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SubagentStatus {
+  Pending,
+  Running,
+  Interrupted,
+  Completed,
+  Errored,
+  Shutdown,
+  NotFound,
+}
+
 /// A durable, ordered event in a session's transcript. `seq` is the replay
 /// cursor: clients reconnect by asking for everything with `seq > last_seq`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -105,6 +117,33 @@ pub enum EventPayload {
   SkillInvoked {
     skill: String,
     args: serde_json::Value,
+  },
+
+  SubagentStarted {
+    thread_id: String,
+    nickname: Option<String>,
+    role: Option<String>,
+    prompt: Option<String>,
+    model: Option<String>,
+    effort: Option<String>,
+    status: SubagentStatus,
+    can_accept_direct_input: Option<bool>,
+    #[serde(default)]
+    active_turn_id: Option<String>,
+  },
+
+  SubagentStatusChanged {
+    thread_id: String,
+    status: SubagentStatus,
+    message: Option<String>,
+    can_accept_direct_input: Option<bool>,
+    #[serde(default)]
+    active_turn_id: Option<String>,
+  },
+
+  SubagentResult {
+    thread_id: String,
+    summary: String,
   },
 
   PermissionRequested(PermissionRequest),

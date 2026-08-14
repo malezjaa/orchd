@@ -790,7 +790,9 @@ export function PromptInput({
     const submittedContent = content ?? editorContentRef.current
     const prompt = (
       promptOverride ??
-      (submittedContent ? promptTextFromContent(submittedContent) : currentValue)
+      (submittedContent
+        ? promptTextFromContent(submittedContent)
+        : currentValue)
     ).trim()
     if (!prompt || disabled || loading) return
 

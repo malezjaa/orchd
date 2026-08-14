@@ -353,15 +353,12 @@ export function usePinSession() {
       const previousSessions = queryClient.getQueryData<SessionRecord[]>(
         queryKeys.sessions
       )
-      const previousArchivedSessions = queryClient.getQueryData<SessionRecord[]>(
-        queryKeys.archivedSessions
-      )
+      const previousArchivedSessions = queryClient.getQueryData<
+        SessionRecord[]
+      >(queryKeys.archivedSessions)
       const pinnedAt = pinned ? new Date().toISOString() : null
 
-      for (const queryKey of [
-        queryKeys.sessions,
-        queryKeys.archivedSessions,
-      ]) {
+      for (const queryKey of [queryKeys.sessions, queryKeys.archivedSessions]) {
         queryClient.setQueryData<SessionRecord[]>(queryKey, (current) => {
           if (!current) return current
 
@@ -378,10 +375,7 @@ export function usePinSession() {
     onError: (_error, _variables, context) => {
       if (!context) return
 
-      queryClient.setQueryData(
-        queryKeys.sessions,
-        context.previousSessions
-      )
+      queryClient.setQueryData(queryKeys.sessions, context.previousSessions)
       queryClient.setQueryData(
         queryKeys.archivedSessions,
         context.previousArchivedSessions

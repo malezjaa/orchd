@@ -27,6 +27,7 @@ import { TimelineItem } from "@/components/session/timeline-item"
 import { TurnWork } from "@/components/session/turn-work"
 import { FileTabs } from "@/components/session/file-tabs"
 import { FileView } from "@/components/session/file-view"
+import { SubagentConversation } from "@/components/session/subagent-conversation"
 import { useActiveSession } from "@/lib/active-session-context"
 import {
   agentIcon,
@@ -165,16 +166,12 @@ function LandingState({
                   key={prompt}
                   initial={{
                     opacity: 0,
-                    transform: reduce
-                      ? "translateY(0)"
-                      : "translateY(0.4em)",
+                    transform: reduce ? "translateY(0)" : "translateY(0.4em)",
                   }}
                   animate={{ opacity: 1, transform: "translateY(0)" }}
                   exit={{
                     opacity: 0,
-                    transform: reduce
-                      ? "translateY(0)"
-                      : "translateY(-0.4em)",
+                    transform: reduce ? "translateY(0)" : "translateY(-0.4em)",
                   }}
                   transition={
                     reduce
@@ -193,11 +190,9 @@ function LandingState({
             <button
               type="button"
               onClick={onProjectClick}
-              className="inline-flex max-w-full items-center gap-1 rounded-md text-primary underline decoration-primary/30 underline-offset-4 outline-none transition-colors hover:decoration-primary/70 focus-visible:ring-2 focus-visible:ring-ring/50"
+              className="inline-flex max-w-full items-center gap-1 rounded-md text-primary underline decoration-primary/30 underline-offset-4 transition-colors outline-none hover:decoration-primary/70 focus-visible:ring-2 focus-visible:ring-ring/50"
             >
-              <span className="truncate">
-                {project?.name ?? "a project"}
-              </span>
+              <span className="truncate">{project?.name ?? "a project"}</span>
               <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
             </button>
             <span>?</span>
@@ -280,9 +275,7 @@ export function SessionPanel() {
     EMPTY_PENDING_SETTINGS
   )
   const [projectPickerOpen, setProjectPickerOpen] = useState(false)
-  const [landingProjectId, setLandingProjectId] = useState<string | null>(
-    null
-  )
+  const [landingProjectId, setLandingProjectId] = useState<string | null>(null)
   const [landingPromptIndex, setLandingPromptIndex] = useState(0)
 
   const landingProject =
@@ -368,6 +361,9 @@ export function SessionPanel() {
     updatePolicy,
     closeSession,
     regenerateTitle,
+    sendSubagentInput,
+    interruptSubagent,
+    inspectSubagent,
     titleUpdate,
     stopTitleRegeneration,
   } = useActiveSession()
@@ -535,10 +531,7 @@ export function SessionPanel() {
     await handleSubmitForProject(draft.project, text, content)
   }
 
-  const handleLandingSubmit = async (
-    text: string,
-    content?: ContentPart[]
-  ) => {
+  const handleLandingSubmit = async (text: string, content?: ContentPart[]) => {
     if (!landingProject) {
       toast.error("Choose a project first")
       return
@@ -547,6 +540,10 @@ export function SessionPanel() {
   }
 
   const activeFile = currentTab.type === "path" ? currentTab.file : null
+  const activeSubagent =
+    currentTab.type === "subagent"
+      ? (state.subagents[currentTab.threadId] ?? null)
+      : null
   const activeFilePath =
     fileTreeRoot && activeFile
       ? `${fileTreeRoot.replace(/\/+$/, "")}/${activeFile}`
@@ -564,6 +561,14 @@ export function SessionPanel() {
       }
     },
     [fileTreeRoot, projectTree?.files, switchActiveTab]
+  )
+
+  const handleSubagentOpen = useCallback(
+    (threadId: string) => {
+      switchActiveTab({ type: "subagent", threadId })
+      inspectSubagent(threadId)
+    },
+    [inspectSubagent, switchActiveTab]
   )
 
   if (!session && !draft) {
@@ -589,9 +594,7 @@ export function SessionPanel() {
               centered
               models={models}
               currentModel={draftSettings.model ?? configuredModelId}
-              currentEffort={
-                draftSettings.effort ?? configuredReasoningEffort
-              }
+              currentEffort={draftSettings.effort ?? configuredReasoningEffort}
               currentFastMode={draftSettings.fastMode}
               onModelChange={(model) =>
                 setDraftSettings((prev) => ({ ...prev, model }))
@@ -694,7 +697,7 @@ export function SessionPanel() {
         onTitleAnimationComplete={handleTitleAnimationComplete}
       />
 
-      <FileTabs />
+      <FileTabs subagents={Object.values(state.subagents)} />
 
       <div className="flex min-h-0 flex-1">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -723,6 +726,7 @@ export function SessionPanel() {
                             onAlwaysAllow={handleAlwaysAllow}
                             onDeny={handleDeny}
                             onFileOpen={handleFileOpen}
+                            onSubagentOpen={handleSubagentOpen}
                           />
                         ) : null}
                         {group.work.length > 0 || working ? (
@@ -743,6 +747,7 @@ export function SessionPanel() {
                                 onAlwaysAllow={handleAlwaysAllow}
                                 onDeny={handleDeny}
                                 onFileOpen={handleFileOpen}
+                                onSubagentOpen={handleSubagentOpen}
                               />
                             ))}
                           </TurnWork>
@@ -756,6 +761,7 @@ export function SessionPanel() {
                             onAlwaysAllow={handleAlwaysAllow}
                             onDeny={handleDeny}
                             onFileOpen={handleFileOpen}
+                            onSubagentOpen={handleSubagentOpen}
                           />
                         ))}
                       </Fragment>
@@ -782,7 +788,22 @@ export function SessionPanel() {
                 skills={skills}
               />
             </>
-          ) : activeFilePath && activeFile && fileTreeRoot ? (
+          ) : currentTab.type === "subagent" && activeSubagent ? (
+            <SubagentConversation
+              agent={activeSubagent}
+              messages={state.subagentMessages[activeSubagent.thread_id] ?? []}
+              agentKind={session.agent_kind}
+              filePaths={projectTree?.files}
+              skills={skills}
+              onSend={sendSubagentInput}
+              onInterrupt={interruptSubagent}
+              onInspect={inspectSubagent}
+              onSubagentOpen={handleSubagentOpen}
+            />
+          ) : currentTab.type === "path" &&
+            activeFilePath &&
+            activeFile &&
+            fileTreeRoot ? (
             <FileView
               key={activeFilePath}
               cwd={fileTreeRoot}
@@ -793,7 +814,8 @@ export function SessionPanel() {
             <div className="grid flex-1 place-items-center">
               <div className="flex flex-col items-center gap-2 px-4 text-center text-sm text-muted-foreground">
                 <TriangleAlert className="size-5" />
-                Couldn't load {currentTab.file}
+                Couldn't load{" "}
+                {currentTab.type === "path" ? currentTab.file : "this subagent"}
               </div>
             </div>
           )}
@@ -806,6 +828,7 @@ export function SessionPanel() {
             state,
             context: context ?? null,
             model: liveCatalogEntry,
+            onInspectSubagent: handleSubagentOpen,
           }}
         />
       </div>

@@ -18,6 +18,7 @@ import type {
   ProjectRecord,
   ProcessInventory,
   SessionRecord,
+  SubagentRecord,
   SettingsPatch,
   SettingsRecord,
 } from "@/lib/orchd"
@@ -104,6 +105,14 @@ export const api = {
     request<SessionRecord[]>("/sessions?archived=true"),
 
   getSession: (id: string) => request<SessionRecord>(`/sessions/${id}`),
+
+  listSubagents: (id: string) =>
+    request<SubagentRecord[]>(`/sessions/${id}/subagents`),
+
+  getSubagent: (sessionId: string, threadId: string) =>
+    request<SubagentRecord>(
+      `/sessions/${sessionId}/subagents/${encodeURIComponent(threadId)}`
+    ),
 
   listSessionProcesses: (id: string) =>
     request<ProcessInventory>(`/sessions/${id}/processes`),

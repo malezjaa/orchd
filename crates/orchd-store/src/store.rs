@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use orchd_core::{
   AgentKind, ApprovalId, EventPayload, PermissionRequest, ProjectId, SessionEvent,
-  SessionId, TurnId,
+  SessionId, SubagentStatus, TurnId,
 };
 use rand::{RngCore, rngs::OsRng};
 use sha2::{Digest, Sha256};
@@ -17,7 +17,8 @@ use crate::{
   error::StoreError,
   models::{
     ApprovalStatus, ClientSessionRecord, ProjectRecord, SessionRecord, SessionStatus,
-    SettingsPatch, SettingsRecord, agent_kind_from_sql, agent_kind_to_sql,
+    SettingsPatch, SettingsRecord, SubagentRecord, agent_kind_from_sql,
+    agent_kind_to_sql,
   },
 };
 
@@ -238,11 +239,174 @@ impl Store {
         .execute(&mut *tx)
         .await?;
     }
+    sqlx::query("DELETE FROM subagents WHERE parent_session_id = ?1")
+      .bind(id.to_string())
+      .execute(&mut *tx)
+      .await?;
     sqlx::query("DELETE FROM sessions WHERE id = ?1")
       .bind(id.to_string())
       .execute(&mut *tx)
       .await?;
     tx.commit().await?;
+    Ok(())
+  }
+
+  pub async fn list_subagents(
+    &self,
+    parent_session_id: SessionId,
+  ) -> Result<Vec<SubagentRecord>, StoreError> {
+    let rows = sqlx::query(
+      "SELECT parent_session_id, thread_id, nickname, role, prompt, model, effort,
+              status, message, summary, can_accept_direct_input, active_turn_id,
+              created_at, updated_at
+         FROM subagents WHERE parent_session_id = ?1 ORDER BY created_at ASC",
+    )
+    .bind(parent_session_id.to_string())
+    .fetch_all(&self.pool)
+    .await?;
+    rows.iter().map(row_to_subagent).collect()
+  }
+
+  pub async fn get_subagent(
+    &self,
+    parent_session_id: SessionId,
+    thread_id: &str,
+  ) -> Result<Option<SubagentRecord>, StoreError> {
+    let row = sqlx::query(
+      "SELECT parent_session_id, thread_id, nickname, role, prompt, model, effort,
+              status, message, summary, can_accept_direct_input, active_turn_id,
+              created_at, updated_at
+         FROM subagents WHERE parent_session_id = ?1 AND thread_id = ?2",
+    )
+    .bind(parent_session_id.to_string())
+    .bind(thread_id)
+    .fetch_optional(&self.pool)
+    .await?;
+    row.map(|r| row_to_subagent(&r)).transpose()
+  }
+
+  #[allow(clippy::too_many_arguments)]
+  pub async fn upsert_subagent(
+    &self,
+    parent_session_id: SessionId,
+    thread_id: &str,
+    nickname: Option<&str>,
+    role: Option<&str>,
+    prompt: Option<&str>,
+    model: Option<&str>,
+    effort: Option<&str>,
+    status: SubagentStatus,
+    can_accept_direct_input: Option<bool>,
+  ) -> Result<(), StoreError> {
+    let now = OffsetDateTime::now_utc().unix_timestamp();
+    sqlx::query(
+      "INSERT INTO subagents
+         (parent_session_id, thread_id, nickname, role, prompt, model, effort,
+          status, message, summary, can_accept_direct_input, active_turn_id,
+          created_at, updated_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, NULL, NULL, ?9, NULL, ?10, ?10)
+       ON CONFLICT(parent_session_id, thread_id) DO UPDATE SET
+         nickname = COALESCE(excluded.nickname, subagents.nickname),
+         role = COALESCE(excluded.role, subagents.role),
+         prompt = COALESCE(excluded.prompt, subagents.prompt),
+         model = COALESCE(excluded.model, subagents.model),
+         effort = COALESCE(excluded.effort, subagents.effort),
+         status = excluded.status,
+         can_accept_direct_input = COALESCE(excluded.can_accept_direct_input,
+           subagents.can_accept_direct_input),
+         updated_at = excluded.updated_at",
+    )
+    .bind(parent_session_id.to_string())
+    .bind(thread_id)
+    .bind(nickname)
+    .bind(role)
+    .bind(prompt)
+    .bind(model)
+    .bind(effort)
+    .bind(subagent_status_to_sql(status))
+    .bind(can_accept_direct_input)
+    .bind(now)
+    .execute(&self.pool)
+    .await?;
+    Ok(())
+  }
+
+  pub async fn update_subagent_status(
+    &self,
+    parent_session_id: SessionId,
+    thread_id: &str,
+    status: SubagentStatus,
+    message: Option<&str>,
+    can_accept_direct_input: Option<bool>,
+    active_turn_id: Option<&str>,
+  ) -> Result<(), StoreError> {
+    let now = OffsetDateTime::now_utc().unix_timestamp();
+    sqlx::query(
+      "INSERT INTO subagents
+         (parent_session_id, thread_id, status, message,
+          can_accept_direct_input, active_turn_id, created_at, updated_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)
+       ON CONFLICT(parent_session_id, thread_id) DO UPDATE SET
+         status = excluded.status,
+         message = COALESCE(excluded.message, subagents.message),
+         can_accept_direct_input = COALESCE(excluded.can_accept_direct_input,
+           subagents.can_accept_direct_input),
+         active_turn_id = CASE
+           WHEN excluded.active_turn_id IS NOT NULL
+             OR excluded.status IN ('completed', 'interrupted', 'errored', 'shutdown', \
+       'not_found')
+           THEN excluded.active_turn_id
+           ELSE subagents.active_turn_id
+         END,
+         updated_at = excluded.updated_at",
+    )
+    .bind(parent_session_id.to_string())
+    .bind(thread_id)
+    .bind(subagent_status_to_sql(status))
+    .bind(message)
+    .bind(can_accept_direct_input)
+    .bind(active_turn_id)
+    .bind(now)
+    .execute(&self.pool)
+    .await?;
+    Ok(())
+  }
+
+  pub async fn set_subagent_result(
+    &self,
+    parent_session_id: SessionId,
+    thread_id: &str,
+    summary: &str,
+  ) -> Result<(), StoreError> {
+    sqlx::query(
+      "UPDATE subagents SET summary = ?1, updated_at = ?2
+         WHERE parent_session_id = ?3 AND thread_id = ?4",
+    )
+    .bind(summary)
+    .bind(OffsetDateTime::now_utc().unix_timestamp())
+    .bind(parent_session_id.to_string())
+    .bind(thread_id)
+    .execute(&self.pool)
+    .await?;
+    Ok(())
+  }
+
+  pub async fn set_subagent_active_turn(
+    &self,
+    parent_session_id: SessionId,
+    thread_id: &str,
+    turn_id: Option<&str>,
+  ) -> Result<(), StoreError> {
+    sqlx::query(
+      "UPDATE subagents SET active_turn_id = ?1, updated_at = ?2
+         WHERE parent_session_id = ?3 AND thread_id = ?4",
+    )
+    .bind(turn_id)
+    .bind(OffsetDateTime::now_utc().unix_timestamp())
+    .bind(parent_session_id.to_string())
+    .bind(thread_id)
+    .execute(&self.pool)
+    .await?;
     Ok(())
   }
 
@@ -1074,6 +1238,58 @@ fn row_to_session(row: &sqlx::sqlite::SqliteRow) -> SessionRecord {
   }
 }
 
+fn row_to_subagent(row: &sqlx::sqlite::SqliteRow) -> Result<SubagentRecord, StoreError> {
+  let parent_session_id: String = row.get("parent_session_id");
+  let created_at: i64 = row.get("created_at");
+  let updated_at: i64 = row.get("updated_at");
+  Ok(SubagentRecord {
+    parent_session_id: SessionId::from_str(&parent_session_id)
+      .expect("valid parent session id in store"),
+    thread_id: row.get("thread_id"),
+    nickname: row.get("nickname"),
+    role: row.get("role"),
+    prompt: row.get("prompt"),
+    model: row.get("model"),
+    effort: row.get("effort"),
+    status: subagent_status_from_sql(&row.get::<String, _>("status")),
+    message: row.get("message"),
+    summary: row.get("summary"),
+    can_accept_direct_input: row
+      .get::<Option<i64>, _>("can_accept_direct_input")
+      .map(|v| v != 0),
+    active_turn_id: row.get("active_turn_id"),
+    created_at: OffsetDateTime::from_unix_timestamp(created_at)
+      .expect("valid subagent created_at timestamp"),
+    updated_at: OffsetDateTime::from_unix_timestamp(updated_at)
+      .expect("valid subagent updated_at timestamp"),
+  })
+}
+
+fn subagent_status_to_sql(status: SubagentStatus) -> &'static str {
+  match status {
+    SubagentStatus::Pending => "pending",
+    SubagentStatus::Running => "running",
+    SubagentStatus::Interrupted => "interrupted",
+    SubagentStatus::Completed => "completed",
+    SubagentStatus::Errored => "errored",
+    SubagentStatus::Shutdown => "shutdown",
+    SubagentStatus::NotFound => "not_found",
+  }
+}
+
+fn subagent_status_from_sql(value: &str) -> SubagentStatus {
+  match value {
+    "pending" | "pending_init" => SubagentStatus::Pending,
+    "running" => SubagentStatus::Running,
+    "interrupted" => SubagentStatus::Interrupted,
+    "completed" => SubagentStatus::Completed,
+    "errored" => SubagentStatus::Errored,
+    "shutdown" => SubagentStatus::Shutdown,
+    "not_found" => SubagentStatus::NotFound,
+    other => panic!("unknown subagent status in store: {other}"),
+  }
+}
+
 fn row_to_project(row: &sqlx::sqlite::SqliteRow) -> ProjectRecord {
   let id: String = row.get("id");
   let archived_at: Option<i64> = row.get("archived_at");
@@ -1225,6 +1441,78 @@ mod tests {
       .expect("update_settings");
     assert_eq!(cleared.interface_font, None);
     assert_eq!(cleared.code_theme.as_deref(), Some("gruvbox"));
+  }
+
+  #[tokio::test]
+  async fn subagents_upsert_list_update_and_cascade() {
+    let store = Store::connect("sqlite::memory:").await.expect("connect");
+    let project =
+      store.create_project("test", "/tmp/orchd-subagent-test").await.expect("project");
+    let session = store
+      .create_session(AgentKind::Codex, project.id, &project.path)
+      .await
+      .expect("session");
+
+    store
+      .upsert_subagent(
+        session.id,
+        "child-1",
+        Some("reviewer"),
+        Some("review"),
+        Some("Review the changes"),
+        Some("gpt-5.4"),
+        Some("high"),
+        SubagentStatus::Running,
+        Some(true),
+      )
+      .await
+      .expect("upsert");
+    store
+      .upsert_subagent(
+        session.id,
+        "child-1",
+        None,
+        None,
+        None,
+        None,
+        None,
+        SubagentStatus::Completed,
+        None,
+      )
+      .await
+      .expect("idempotent upsert");
+    store
+      .update_subagent_status(
+        session.id,
+        "child-1",
+        SubagentStatus::Completed,
+        Some("done"),
+        Some(true),
+        None,
+      )
+      .await
+      .expect("status");
+    store
+      .set_subagent_result(session.id, "child-1", "Reviewed the changes")
+      .await
+      .expect("result");
+    store
+      .set_subagent_active_turn(session.id, "child-1", Some("child-turn-1"))
+      .await
+      .expect("active turn");
+
+    let child =
+      store.get_subagent(session.id, "child-1").await.expect("get").expect("child");
+    assert_eq!(child.nickname.as_deref(), Some("reviewer"));
+    assert_eq!(child.status, SubagentStatus::Completed);
+    assert_eq!(child.summary.as_deref(), Some("Reviewed the changes"));
+    assert_eq!(child.active_turn_id.as_deref(), Some("child-turn-1"));
+    assert_eq!(store.list_subagents(session.id).await.expect("list").len(), 1);
+
+    store.delete_session(session.id).await.expect("delete");
+    assert!(
+      store.list_subagents(session.id).await.expect("list after delete").is_empty()
+    );
   }
 }
 

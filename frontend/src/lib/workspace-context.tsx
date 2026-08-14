@@ -1,7 +1,10 @@
 import { createContext, useContext } from "react"
 import type { ProjectRecord, SessionRecord } from "@/lib/orchd"
 
-export type CurrentTab = { type: "session" } | { type: "path"; file: string }
+export type CurrentTab =
+  | { type: "session" }
+  | { type: "path"; file: string }
+  | { type: "subagent"; threadId: string }
 
 export interface DraftSession {
   project: ProjectRecord

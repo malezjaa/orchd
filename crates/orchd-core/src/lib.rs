@@ -15,7 +15,9 @@ pub use adapter::{AgentAdapter, Frame, Framing, LaunchSpec, SpawnSpec, Translato
 pub use agent::{AgentCapabilities, AgentKind};
 pub use command::{AgentMode, ContentPart, PolicyPatch, SessionCommand, ThinkingEffort};
 pub use error::AdapterError;
-pub use event::{CloseReason, ErrorScope, EventPayload, SessionEvent, StopReason};
+pub use event::{
+  CloseReason, ErrorScope, EventPayload, SessionEvent, StopReason, SubagentStatus,
+};
 pub use ids::{ApprovalId, BlockId, ProjectId, SessionId, ToolCallId, TurnId};
 pub use instructions::FILE_MENTION_INSTRUCTIONS;
 pub use models::{ModelInfo, ModelProvider, SUPPORTED_MODELS, find_model};

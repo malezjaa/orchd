@@ -99,6 +99,11 @@ pub trait Translator: Send {
   /// flags on respawn). `None` until the agent has told us.
   fn native_session_id(&self) -> Option<String>;
 
+  /// Restore adapter-local state that is needed to address a native child
+  /// thread after the daemon restarts. Adapters that do not support native
+  /// subagents can keep the default no-op implementation.
+  fn restore_subagent(&mut self, _thread_id: &str, _active_turn_id: Option<&str>) {}
+
   /// A best-effort, agent-generated session title, if this adapter's agent
   /// has any such mechanism (e.g. Claude Code names its own conversations
   /// asynchronously). `None` means "nothing yet", so callers keep whatever

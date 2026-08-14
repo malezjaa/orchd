@@ -32,6 +32,8 @@ pub fn router() -> Router<AppState> {
     )
     .route("/sessions/{id}/archive", post(archive_session))
     .route("/sessions/{id}/processes", get(list_processes))
+    .route("/sessions/{id}/subagents", get(list_subagents))
+    .route("/sessions/{id}/subagents/{thread_id}", get(get_subagent))
     .route("/sessions/{id}/unarchive", post(unarchive_session))
     .route("/sessions/{id}/pin", post(pin_session))
     .route("/sessions/{id}/unpin", post(unpin_session))
@@ -324,6 +326,24 @@ async fn list_processes(
     processes: processes::list_processes(record.pgid),
     session_busy: state.registry.is_busy(id),
   }))
+}
+
+async fn list_subagents(
+  State(state): State<AppState>,
+  Path(id): Path<String>,
+) -> Result<Json<Vec<orchd_store::SubagentRecord>>, ApiError> {
+  let id =
+    SessionId::from_str(&id).map_err(|_| ApiError::bad_request("invalid session id"))?;
+  Ok(Json(state.registry.list_subagents(id).await?))
+}
+
+async fn get_subagent(
+  State(state): State<AppState>,
+  Path((id, thread_id)): Path<(String, String)>,
+) -> Result<Json<orchd_store::SubagentRecord>, ApiError> {
+  let id =
+    SessionId::from_str(&id).map_err(|_| ApiError::bad_request("invalid session id"))?;
+  Ok(Json(state.registry.get_subagent(id, &thread_id).await?))
 }
 
 async fn archive_session(

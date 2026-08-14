@@ -115,6 +115,16 @@ export function useSessionState(
 
     let cancelled = false
 
+    void api
+      .listSubagents(sessionId)
+      .then((records) => {
+        if (!cancelled) dispatch({ type: "hydrate_subagents", records })
+      })
+      .catch(() => {
+        // The event log remains the source of truth for replay. A missing
+        // snapshot is not fatal for the live session.
+      })
+
     const connect = async () => {
       setStatus("connecting")
       let ticket: string
@@ -338,6 +348,51 @@ export function useSessionState(
       toast.error("Not connected to the session")
   }, [sendRaw])
 
+  const sendSubagentInput = useCallback(
+    (threadId: string, text: string, content?: ContentPart[]) => {
+      const trimmed = text.trim()
+      const messageContent = content ?? [{ type: "text", text: trimmed }]
+      if (!trimmed && !content?.length) return
+      if (
+        !sendRaw({
+          type: "send_subagent_input",
+          thread_id: threadId,
+          content: messageContent,
+        })
+      )
+        toast.error("Not connected to the session")
+      else {
+        dispatch({
+          type: "append_subagent_message",
+          threadId,
+          message: {
+            id: `${threadId}:user:${crypto.randomUUID()}`,
+            role: "user",
+            text: trimmed || "[attachment]",
+            ts: new Date().toISOString(),
+          },
+        })
+      }
+    },
+    [sendRaw]
+  )
+
+  const interruptSubagent = useCallback(
+    (threadId: string) => {
+      if (!sendRaw({ type: "interrupt_subagent", thread_id: threadId }))
+        toast.error("Not connected to the session")
+    },
+    [sendRaw]
+  )
+
+  const inspectSubagent = useCallback(
+    (threadId: string) => {
+      if (!sendRaw({ type: "inspect_subagent", thread_id: threadId }))
+        toast.error("Not connected to the session")
+    },
+    [sendRaw]
+  )
+
   return {
     status: sessionId ? status : "idle",
     state,
@@ -349,6 +404,9 @@ export function useSessionState(
     updatePolicy,
     closeSession,
     regenerateTitle,
+    sendSubagentInput,
+    interruptSubagent,
+    inspectSubagent,
   }
 }
 

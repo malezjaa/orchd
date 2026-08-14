@@ -110,6 +110,16 @@ pub enum SessionCommand {
   /// conversation has evolved, replacing whatever title is set now (see
   /// the sidebar's "Regenerate title" action).
   RegenerateTitle,
+  SendSubagentInput {
+    thread_id: String,
+    content: Vec<ContentPart>,
+  },
+  InterruptSubagent {
+    thread_id: String,
+  },
+  InspectSubagent {
+    thread_id: String,
+  },
   /// Internal: the actor sends this to itself when a background
   /// title-generation subprocess completes (see
   /// `SessionActor::spawn_title_generation`). `epoch` is compared against

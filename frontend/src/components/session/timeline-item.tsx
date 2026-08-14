@@ -24,6 +24,7 @@ export interface TimelineItemProps {
   onAlwaysAllow?: (id: string) => void
   onDeny?: (id: string) => void
   onFileOpen?: (path: string) => void
+  onSubagentOpen?: (threadId: string) => void
 }
 
 // Deltas arrive in coarse, uneven bursts, so rather than mirroring `text`
@@ -103,6 +104,7 @@ export function TimelineItem({
   onAlwaysAllow,
   onDeny,
   onFileOpen,
+  onSubagentOpen,
 }: TimelineItemProps) {
   const displayText = useStreamedText(
     event.kind === "assistant_text" ? event.text : "",
@@ -115,7 +117,10 @@ export function TimelineItem({
         <UserRow>
           <MessageBubble variant="soft">
             <MessageBubbleContent>
-              <AgentMarkdown onFileOpen={onFileOpen}>
+              <AgentMarkdown
+                onFileOpen={onFileOpen}
+                onSubagentOpen={onSubagentOpen}
+              >
                 {event.text}
               </AgentMarkdown>
             </MessageBubbleContent>
@@ -144,6 +149,7 @@ export function TimelineItem({
                 event.streaming || displayText.length < event.text.length
               }
               onFileOpen={onFileOpen}
+              onSubagentOpen={onSubagentOpen}
             >
               {displayText}
             </AgentMarkdown>

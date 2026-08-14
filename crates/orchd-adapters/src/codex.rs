@@ -21,6 +21,7 @@ fn capabilities() -> AgentCapabilities {
     resume: true,
     native_permissions: true,
     skills: true,
+    subagents: true,
   }
 }
 

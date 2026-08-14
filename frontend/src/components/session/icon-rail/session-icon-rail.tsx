@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import {
   Activity,
+  Bot,
   Cpu,
   Files,
   GitBranch,
@@ -13,6 +14,7 @@ import { EASE_DRAWER } from "@/lib/ease.ts"
 import { cn } from "@/lib/utils.ts"
 import { basename, type ModelInfo, type SessionContext } from "@/lib/orchd"
 import type { SessionTimelineState } from "@/lib/session-timeline"
+import { SubagentList } from "@/components/agents/subagent-list"
 import { ProjectTreePanel } from "@/components/session/project-tree.tsx"
 import { RunInsightsPanel } from "./run-insights-panel.tsx"
 import { GitPanel } from "./git-panel.tsx"
@@ -47,6 +49,7 @@ export interface SessionInsightsInput {
   state: SessionTimelineState
   context: SessionContext | null
   model?: ModelInfo
+  onInspectSubagent: (threadId: string) => void
 }
 
 function DeferredGitPanel({ rootPath }: { rootPath: string }) {
@@ -69,6 +72,18 @@ function DeferredGitPanel({ rootPath }: { rootPath: string }) {
 }
 
 const RAIL_ACTIONS: RailAction[] = [
+  {
+    id: "subagents",
+    label: "Subagents",
+    icon: (p) => <Bot className={p.className} />,
+    render: (_sessionId, _rootPath, insights) =>
+      insights ? (
+        <SubagentList
+          subagents={Object.values(insights.state.subagents)}
+          onInspect={insights.onInspectSubagent}
+        />
+      ) : null,
+  },
   {
     id: "files",
     label: "Files",
@@ -153,6 +168,17 @@ export function SessionIconRail({
   const [width, setWidthState] = useState(getStoredPanelWidth)
   const [resizing, setResizing] = useState(false)
   const reduce = useReducedMotion() ?? false
+  const subagentCount = insights?.state.subagents
+    ? Object.keys(insights.state.subagents).length
+    : 0
+  const previousSubagentCount = useRef(subagentCount)
+
+  useEffect(() => {
+    if (previousSubagentCount.current === 0 && subagentCount > 0) {
+      setActive("subagents")
+    }
+    previousSubagentCount.current = subagentCount
+  }, [subagentCount])
 
   const draggingRef = useRef(false)
   const startXRef = useRef(0)

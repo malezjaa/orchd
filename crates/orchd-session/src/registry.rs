@@ -5,6 +5,7 @@ use orchd_core::{
 };
 use orchd_store::{
   ProjectRecord, SessionRecord, SessionStatus, SettingsPatch, SettingsRecord, Store,
+  SubagentRecord,
 };
 
 use crate::{
@@ -200,6 +201,54 @@ impl SessionRegistry {
 
   pub async fn get_record(&self, id: SessionId) -> Result<SessionRecord, RegistryError> {
     self.store.get_session(id).await?.ok_or(RegistryError::NotFound(id))
+  }
+
+  pub async fn list_subagents(
+    &self,
+    id: SessionId,
+  ) -> Result<Vec<SubagentRecord>, RegistryError> {
+    if self.store.get_session(id).await?.is_none() {
+      return Err(RegistryError::NotFound(id));
+    }
+    Ok(self.store.list_subagents(id).await?)
+  }
+
+  pub async fn get_subagent(
+    &self,
+    id: SessionId,
+    thread_id: &str,
+  ) -> Result<SubagentRecord, RegistryError> {
+    self.store.get_subagent(id, thread_id).await?.ok_or(RegistryError::NotFound(id))
+  }
+
+  pub async fn send_subagent_input(
+    &self,
+    id: SessionId,
+    thread_id: String,
+    content: Vec<orchd_core::ContentPart>,
+  ) -> Result<(), RegistryError> {
+    let handle = self.get_or_resume(id).await?;
+    handle
+      .send(orchd_core::SessionCommand::SendSubagentInput { thread_id, content })
+      .await
+  }
+
+  pub async fn interrupt_subagent(
+    &self,
+    id: SessionId,
+    thread_id: String,
+  ) -> Result<(), RegistryError> {
+    let handle = self.get_or_resume(id).await?;
+    handle.send(orchd_core::SessionCommand::InterruptSubagent { thread_id }).await
+  }
+
+  pub async fn inspect_subagent(
+    &self,
+    id: SessionId,
+    thread_id: String,
+  ) -> Result<(), RegistryError> {
+    let handle = self.get_or_resume(id).await?;
+    handle.send(orchd_core::SessionCommand::InspectSubagent { thread_id }).await
   }
 
   /// Whether a turn is currently in flight. `false` for any session with no

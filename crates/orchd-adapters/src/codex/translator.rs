@@ -6,8 +6,8 @@ use std::{
 use orchd_core::{
   AdapterError, AgentCapabilities, AgentKind, ApprovalId, BlockId, CanonicalTool,
   ContentPart, Decision, ErrorScope, EventPayload, FILE_MENTION_INSTRUCTIONS, Frame,
-  PermissionRequest, SessionCommand, StopReason, ThinkingEffort, ToolCallId, ToolOutput,
-  ToolRef, Translator, TurnId,
+  PermissionRequest, SessionCommand, StopReason, SubagentStatus, ThinkingEffort,
+  ToolCallId, ToolOutput, ToolRef, Translator, TurnId,
 };
 use serde_json::{Value, json};
 use time::OffsetDateTime;
@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 const JSON_RPC_VERSION: &str = "2.0";
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 enum PendingRequest {
   Initialize,
   StartThread,
@@ -23,11 +23,44 @@ enum PendingRequest {
   StartTurn,
   Interrupt,
   UpdateThreadSettings,
+  StartSubagentTurn { thread_id: String },
+  InterruptSubagent { thread_id: String },
+  ReadSubagent { thread_id: String },
 }
 
 struct PendingApproval {
   native_id: Value,
   method: String,
+}
+
+struct SubagentState {
+  nickname: Option<String>,
+  role: Option<String>,
+  prompt: Option<String>,
+  model: Option<String>,
+  effort: Option<String>,
+  status: SubagentStatus,
+  can_accept_direct_input: Option<bool>,
+  active_turn_id: Option<String>,
+  summary: String,
+  last_emitted_summary: Option<String>,
+}
+
+impl Default for SubagentState {
+  fn default() -> Self {
+    Self {
+      nickname: None,
+      role: None,
+      prompt: None,
+      model: None,
+      effort: None,
+      status: SubagentStatus::Pending,
+      can_accept_direct_input: None,
+      active_turn_id: None,
+      summary: String::new(),
+      last_emitted_summary: None,
+    }
+  }
 }
 
 /// Stateful translator for the Codex app-server v2 JSON-RPC protocol.
@@ -49,6 +82,7 @@ pub struct CodexTranslator {
   model: Option<String>,
   effort: Option<ThinkingEffort>,
   fast_mode: Option<bool>,
+  subagents: HashMap<String, SubagentState>,
 }
 
 impl CodexTranslator {
@@ -76,6 +110,7 @@ impl CodexTranslator {
       model,
       effort: None,
       fast_mode: None,
+      subagents: HashMap::new(),
     }
   }
 
@@ -148,6 +183,15 @@ impl CodexTranslator {
       return Ok(());
     };
 
+    self.queue_turn_for_thread(&thread_id, Some(client_msg_id), content)
+  }
+
+  fn queue_turn_for_thread(
+    &mut self,
+    thread_id: &str,
+    client_msg_id: Option<Uuid>,
+    content: Vec<ContentPart>,
+  ) -> Result<(), AdapterError> {
     let skills = content
       .iter()
       .filter_map(|part| match part {
@@ -185,9 +229,11 @@ impl CodexTranslator {
 
     let mut params = json!({
       "threadId": thread_id,
-      "clientUserMessageId": client_msg_id.to_string(),
       "input": input,
     });
+    if let Some(client_msg_id) = client_msg_id {
+      params["clientUserMessageId"] = json!(client_msg_id.to_string());
+    }
     if let Some(model) = &self.model {
       params["model"] = json!(model);
     }
@@ -197,7 +243,37 @@ impl CodexTranslator {
     if let Some(fast_mode) = self.fast_mode {
       params["serviceTier"] = if fast_mode { json!("priority") } else { Value::Null };
     }
-    self.queue_request("turn/start", params, PendingRequest::StartTurn)
+    let pending = if client_msg_id.is_some()
+      && self.native_session_id.as_deref() == Some(thread_id)
+    {
+      PendingRequest::StartTurn
+    } else {
+      PendingRequest::StartSubagentTurn { thread_id: thread_id.to_string() }
+    };
+    self.queue_request("turn/start", params, pending)
+  }
+
+  fn queue_subagent_interrupt(&mut self, thread_id: &str) -> Result<(), AdapterError> {
+    let Some(turn_id) =
+      self.subagents.get(thread_id).and_then(|s| s.active_turn_id.clone())
+    else {
+      return Err(AdapterError::Protocol(format!(
+        "subagent {thread_id} has no active turn"
+      )));
+    };
+    self.queue_request(
+      "turn/interrupt",
+      json!({ "threadId": thread_id, "turnId": turn_id }),
+      PendingRequest::InterruptSubagent { thread_id: thread_id.to_string() },
+    )
+  }
+
+  fn queue_subagent_read(&mut self, thread_id: &str) -> Result<(), AdapterError> {
+    self.queue_request(
+      "thread/read",
+      json!({ "threadId": thread_id, "includeTurns": true }),
+      PendingRequest::ReadSubagent { thread_id: thread_id.to_string() },
+    )
   }
 
   fn flush_pending_messages(&mut self) -> Result<(), AdapterError> {
@@ -255,7 +331,40 @@ impl CodexTranslator {
         }
         Ok(vec![])
       }
+      PendingRequest::StartSubagentTurn { thread_id } => {
+        let turn_id =
+          value.pointer("/result/turn/id").and_then(Value::as_str).map(str::to_string);
+        if let Some(state) = self.subagents.get_mut(&thread_id) {
+          state.active_turn_id = turn_id.clone();
+          state.status = SubagentStatus::Running;
+        }
+        Ok(vec![EventPayload::SubagentStatusChanged {
+          thread_id,
+          status: SubagentStatus::Running,
+          message: None,
+          can_accept_direct_input: Some(true),
+          active_turn_id: turn_id,
+        }])
+      }
       PendingRequest::Interrupt => Ok(vec![]),
+      PendingRequest::InterruptSubagent { thread_id } => {
+        Ok(vec![EventPayload::SubagentStatusChanged {
+          thread_id,
+          status: SubagentStatus::Interrupted,
+          message: None,
+          can_accept_direct_input: Some(true),
+          active_turn_id: None,
+        }])
+      }
+      PendingRequest::ReadSubagent { thread_id } => {
+        let result = value.get("result").unwrap_or(&Value::Null);
+        let mut events = self.decode_subagent_metadata(&thread_id, result);
+        let summary = extract_thread_summary(result);
+        if let Some(event) = self.subagent_result(&thread_id, summary) {
+          events.push(event);
+        }
+        Ok(events)
+      }
       PendingRequest::UpdateThreadSettings => Ok(vec![]),
     }
   }
@@ -290,6 +399,46 @@ impl CodexTranslator {
     result: &Value,
   ) -> Result<Vec<EventPayload>, AdapterError> {
     let thread = result.get("thread").unwrap_or(result);
+    if let Some(parent_thread_id) = thread.get("parentThreadId").and_then(Value::as_str) {
+      let thread_id = thread.get("id").and_then(Value::as_str).unwrap_or_default();
+      if thread_id.is_empty() {
+        return Ok(vec![]);
+      }
+      let state = self.subagents.entry(thread_id.to_string()).or_default();
+      if let Some(nickname) = thread.get("agentNickname").and_then(Value::as_str) {
+        state.nickname = Some(nickname.to_string());
+      }
+      if let Some(role) = thread.get("agentRole").and_then(Value::as_str) {
+        state.role = Some(role.to_string());
+      }
+      if let Some(model) = thread.get("model").and_then(Value::as_str) {
+        state.model = Some(model.to_string());
+      }
+      state.can_accept_direct_input =
+        thread.get("canAcceptDirectInput").and_then(Value::as_bool);
+      if state.nickname.is_none() {
+        state.nickname = infer_spawn_nickname(state.prompt.as_deref());
+      }
+      if let Some(preview) = thread.get("preview").and_then(Value::as_str) {
+        state.prompt = Some(preview.to_string());
+      }
+      if state.nickname.is_none() {
+        state.nickname = infer_spawn_nickname(state.prompt.as_deref());
+      }
+      state.status = SubagentStatus::Running;
+      let _ = parent_thread_id;
+      return Ok(vec![EventPayload::SubagentStarted {
+        thread_id: thread_id.to_string(),
+        nickname: state.nickname.clone(),
+        role: state.role.clone(),
+        prompt: state.prompt.clone(),
+        model: state.model.clone(),
+        effort: None,
+        status: state.status.clone(),
+        can_accept_direct_input: state.can_accept_direct_input,
+        active_turn_id: state.active_turn_id.clone(),
+      }]);
+    }
     if let Some(id) = thread.get("id").and_then(Value::as_str) {
       self.native_session_id = Some(id.to_string());
     }
@@ -345,11 +494,32 @@ impl CodexTranslator {
           .unwrap_or_default(),
       ),
       "turn/started" => {
-        self.active_turn_id =
+        let thread_id = params.get("threadId").and_then(Value::as_str).unwrap_or("");
+        let turn_id =
           params.pointer("/turn/id").and_then(Value::as_str).map(str::to_string);
-        Ok(vec![])
+        if !thread_id.is_empty()
+          && thread_id != self.native_session_id.as_deref().unwrap_or("")
+        {
+          if let Some(state) = self.subagents.get_mut(thread_id) {
+            state.active_turn_id = turn_id.clone();
+            state.status = SubagentStatus::Running;
+          }
+          Ok(vec![EventPayload::SubagentStatusChanged {
+            thread_id: thread_id.to_string(),
+            status: SubagentStatus::Running,
+            message: None,
+            can_accept_direct_input: Some(true),
+            active_turn_id: turn_id,
+          }])
+        } else {
+          self.active_turn_id = turn_id;
+          Ok(vec![])
+        }
       }
-      "turn/completed" => self.decode_turn_completed(params),
+      "turn/completed" => self.decode_turn_completed_for_thread(
+        params.get("threadId").and_then(Value::as_str).unwrap_or(""),
+        params,
+      ),
       "thread/tokenUsage/updated" => self.decode_usage(params),
       "item/started" => self.decode_item_started(params),
       "item/completed" => self.decode_item_completed(params),
@@ -390,6 +560,12 @@ impl CodexTranslator {
     params: &Value,
   ) -> Result<Vec<EventPayload>, AdapterError> {
     let Some(item) = params.get("item") else { return Ok(vec![]) };
+    if item.get("type").and_then(Value::as_str) == Some("subAgentActivity") {
+      return self.decode_subagent_activity(item);
+    }
+    if item.get("type").and_then(Value::as_str) == Some("collabAgentToolCall") {
+      return self.decode_collab_item(item);
+    }
     let Some(item_id) = item.get("id").and_then(Value::as_str) else {
       return Ok(vec![]);
     };
@@ -435,6 +611,12 @@ impl CodexTranslator {
     params: &Value,
   ) -> Result<Vec<EventPayload>, AdapterError> {
     let Some(item) = params.get("item") else { return Ok(vec![]) };
+    if item.get("type").and_then(Value::as_str) == Some("subAgentActivity") {
+      return self.decode_subagent_activity(item);
+    }
+    if item.get("type").and_then(Value::as_str) == Some("collabAgentToolCall") {
+      return self.decode_collab_item(item);
+    }
     let Some(item_id) = item.get("id").and_then(Value::as_str) else {
       return Ok(vec![]);
     };
@@ -473,6 +655,19 @@ impl CodexTranslator {
     let Some(item_id) = params.get("itemId").and_then(Value::as_str) else {
       return Ok(vec![]);
     };
+    let thread_id = params.get("threadId").and_then(Value::as_str).unwrap_or("");
+    if !thread_id.is_empty()
+      && thread_id != self.native_session_id.as_deref().unwrap_or("")
+    {
+      let state = self.subagents.entry(thread_id.to_string()).or_default();
+      state
+        .summary
+        .push_str(params.get("delta").and_then(Value::as_str).unwrap_or_default());
+      if state.summary.len() > 8_000 {
+        state.summary.truncate(8_000);
+      }
+      return Ok(vec![]);
+    }
     let block = *self.blocks.entry(item_id.to_string()).or_default();
     Ok(vec![EventPayload::TextDelta {
       block,
@@ -488,6 +683,12 @@ impl CodexTranslator {
       return Ok(vec![]);
     };
     let key = format!("reasoning:{item_id}");
+    let thread_id = params.get("threadId").and_then(Value::as_str).unwrap_or("");
+    if !thread_id.is_empty()
+      && thread_id != self.native_session_id.as_deref().unwrap_or("")
+    {
+      return Ok(vec![]);
+    }
     let block = *self.blocks.entry(key).or_default();
     Ok(vec![EventPayload::ThinkingDelta {
       block,
@@ -546,7 +747,7 @@ impl CodexTranslator {
     };
     let Some(native_id) = value.get("id") else { return Ok(vec![]) };
     let params = value.get("params").unwrap_or(&Value::Null);
-    let (kind, tool_name, canonical, detail) = match method {
+    let (kind, tool_name, canonical, mut detail) = match method {
       "item/commandExecution/requestApproval" => {
         let command = params.get("command").and_then(Value::as_str).unwrap_or_default();
         (
@@ -585,6 +786,14 @@ impl CodexTranslator {
         return Ok(vec![]);
       }
     };
+    if let Some(thread_id) = params.get("threadId").and_then(Value::as_str) {
+      detail["thread_id"] = json!(thread_id);
+      if self.native_session_id.as_deref() != Some(thread_id) {
+        if let Some(parent_thread_id) = &self.native_session_id {
+          detail["parent_thread_id"] = json!(parent_thread_id);
+        }
+      }
+    }
     let approval_id = ApprovalId::new();
     self.pending_approvals.insert(
       approval_id,
@@ -613,6 +822,190 @@ impl CodexTranslator {
       suggested: None,
       expires_at: OffsetDateTime::now_utc() + time::Duration::minutes(5),
     })])
+  }
+
+  fn decode_turn_completed_for_thread(
+    &mut self,
+    thread_id: &str,
+    params: &Value,
+  ) -> Result<Vec<EventPayload>, AdapterError> {
+    if thread_id.is_empty()
+      || thread_id == self.native_session_id.as_deref().unwrap_or("")
+    {
+      return self.decode_turn_completed(params);
+    }
+    let turn = params.get("turn").unwrap_or(&Value::Null);
+    let status = turn.get("status").and_then(Value::as_str).unwrap_or("failed");
+    let status = match status {
+      "pendingInit" | "pending" | "pending_init" => SubagentStatus::Pending,
+      "completed" => SubagentStatus::Completed,
+      "interrupted" => SubagentStatus::Interrupted,
+      "shutdown" => SubagentStatus::Shutdown,
+      "notFound" | "not_found" => SubagentStatus::NotFound,
+      "running" => SubagentStatus::Running,
+      _ => SubagentStatus::Errored,
+    };
+    let message =
+      turn.pointer("/error/message").and_then(Value::as_str).map(str::to_string);
+    if let Some(state) = self.subagents.get_mut(thread_id) {
+      state.active_turn_id = None;
+      state.status = status.clone();
+    }
+    let mut events = vec![EventPayload::SubagentStatusChanged {
+      thread_id: thread_id.to_string(),
+      status,
+      message,
+      can_accept_direct_input: Some(true),
+      active_turn_id: None,
+    }];
+    if let Some(event) = self.subagent_result(thread_id, String::new()) {
+      events.push(event);
+    }
+    Ok(events)
+  }
+
+  fn subagent_result(
+    &mut self,
+    thread_id: &str,
+    read_summary: String,
+  ) -> Option<EventPayload> {
+    let state = self.subagents.get_mut(thread_id)?;
+    if !read_summary.is_empty() {
+      state.summary = read_summary;
+    }
+    if state.summary.is_empty()
+      || state.last_emitted_summary.as_deref() == Some(state.summary.as_str())
+    {
+      return None;
+    }
+    state.last_emitted_summary = Some(state.summary.clone());
+    Some(EventPayload::SubagentResult {
+      thread_id: thread_id.to_string(),
+      summary: state.summary.clone(),
+    })
+  }
+
+  fn decode_subagent_activity(
+    &mut self,
+    item: &Value,
+  ) -> Result<Vec<EventPayload>, AdapterError> {
+    let Some(thread_id) = item.get("agentThreadId").and_then(Value::as_str) else {
+      return Ok(vec![]);
+    };
+    let status = match item.get("kind").and_then(Value::as_str) {
+      Some("started") | Some("interacted") => SubagentStatus::Running,
+      Some("interrupted") => SubagentStatus::Interrupted,
+      _ => SubagentStatus::Pending,
+    };
+    self.subagents.entry(thread_id.to_string()).or_default().status = status.clone();
+    Ok(vec![EventPayload::SubagentStatusChanged {
+      thread_id: thread_id.to_string(),
+      status,
+      message: None,
+      can_accept_direct_input: None,
+      active_turn_id: None,
+    }])
+  }
+
+  fn decode_collab_item(
+    &mut self,
+    item: &Value,
+  ) -> Result<Vec<EventPayload>, AdapterError> {
+    let prompt = item.get("prompt").and_then(Value::as_str).map(str::to_string);
+    let model = item.get("model").and_then(Value::as_str).map(str::to_string);
+    let effort = item.get("reasoningEffort").and_then(Value::as_str).map(str::to_string);
+    let nickname = item
+      .get("agentNickname")
+      .or_else(|| item.get("nickname"))
+      .or_else(|| item.get("name"))
+      .and_then(Value::as_str)
+      .map(str::to_string)
+      .or_else(|| infer_spawn_nickname(prompt.as_deref()));
+    let mut events = Vec::new();
+    let receivers = item
+      .get("receiverThreadIds")
+      .and_then(Value::as_array)
+      .cloned()
+      .unwrap_or_default();
+    for receiver in receivers {
+      let Some(thread_id) = receiver.as_str() else { continue };
+      let first_seen = !self.subagents.contains_key(thread_id);
+      let state = self.subagents.entry(thread_id.to_string()).or_default();
+      if state.nickname.is_none() {
+        state.nickname = nickname.clone();
+      }
+      state.prompt = prompt.clone();
+      state.model = model.clone();
+      state.effort = effort.clone();
+      let status = item
+        .pointer(&format!("/agentsStates/{thread_id}/status"))
+        .and_then(Value::as_str)
+        .map(parse_subagent_status)
+        .unwrap_or(SubagentStatus::Pending);
+      let message = item
+        .pointer(&format!("/agentsStates/{thread_id}/message"))
+        .and_then(Value::as_str)
+        .map(str::to_string);
+      state.status = status.clone();
+      if first_seen {
+        events.push(EventPayload::SubagentStarted {
+          thread_id: thread_id.to_string(),
+          nickname: state.nickname.clone(),
+          role: state.role.clone(),
+          prompt: state.prompt.clone(),
+          model: state.model.clone(),
+          effort: state.effort.clone(),
+          status: status.clone(),
+          can_accept_direct_input: state.can_accept_direct_input,
+          active_turn_id: state.active_turn_id.clone(),
+        });
+      } else {
+        events.push(EventPayload::SubagentStatusChanged {
+          thread_id: thread_id.to_string(),
+          status: status.clone(),
+          message,
+          can_accept_direct_input: state.can_accept_direct_input,
+          active_turn_id: state.active_turn_id.clone(),
+        });
+      }
+    }
+    Ok(events)
+  }
+
+  fn decode_subagent_metadata(
+    &mut self,
+    thread_id: &str,
+    result: &Value,
+  ) -> Vec<EventPayload> {
+    let thread = result.get("thread").unwrap_or(result);
+    let state = self.subagents.entry(thread_id.to_string()).or_default();
+    if let Some(nickname) = thread.get("agentNickname").and_then(Value::as_str) {
+      state.nickname = Some(nickname.to_string());
+    }
+    if let Some(role) = thread.get("agentRole").and_then(Value::as_str) {
+      state.role = Some(role.to_string());
+    }
+    if let Some(model) = thread.get("model").and_then(Value::as_str) {
+      state.model = Some(model.to_string());
+    }
+    if let Some(preview) = thread.get("preview").and_then(Value::as_str) {
+      state.prompt = Some(preview.to_string());
+    }
+    state.can_accept_direct_input = thread
+      .get("canAcceptDirectInput")
+      .and_then(Value::as_bool)
+      .or(state.can_accept_direct_input);
+    vec![EventPayload::SubagentStarted {
+      thread_id: thread_id.to_string(),
+      nickname: state.nickname.clone(),
+      role: state.role.clone(),
+      prompt: state.prompt.clone(),
+      model: state.model.clone(),
+      effort: state.effort.clone(),
+      status: state.status.clone(),
+      can_accept_direct_input: state.can_accept_direct_input,
+      active_turn_id: state.active_turn_id.clone(),
+    }]
   }
 }
 
@@ -657,6 +1050,18 @@ impl Translator for CodexTranslator {
     match cmd {
       SessionCommand::UserMessage { client_msg_id, content } => {
         self.queue_turn(*client_msg_id, content.clone())?;
+      }
+      SessionCommand::SendSubagentInput { thread_id, content } => {
+        if !self.subagents.contains_key(thread_id) {
+          return Err(AdapterError::Protocol(format!("unknown subagent {thread_id}")));
+        }
+        self.queue_turn_for_thread(thread_id, None, content.clone())?;
+      }
+      SessionCommand::InterruptSubagent { thread_id } => {
+        self.queue_subagent_interrupt(thread_id)?;
+      }
+      SessionCommand::InspectSubagent { thread_id } => {
+        self.queue_subagent_read(thread_id)?;
       }
       SessionCommand::Interrupt => {
         self.interrupt_requested = true;
@@ -723,6 +1128,11 @@ impl Translator for CodexTranslator {
   fn native_session_id(&self) -> Option<String> {
     self.native_session_id.clone()
   }
+
+  fn restore_subagent(&mut self, thread_id: &str, active_turn_id: Option<&str>) {
+    let state = self.subagents.entry(thread_id.to_string()).or_default();
+    state.active_turn_id = active_turn_id.map(str::to_string);
+  }
 }
 
 fn request_id_key(value: &Value) -> String {
@@ -756,6 +1166,55 @@ fn effort_name(effort: ThinkingEffort) -> &'static str {
   }
 }
 
+fn parse_subagent_status(status: &str) -> SubagentStatus {
+  match status {
+    "pendingInit" | "pending" | "pending_init" => SubagentStatus::Pending,
+    "running" => SubagentStatus::Running,
+    "interrupted" => SubagentStatus::Interrupted,
+    "completed" => SubagentStatus::Completed,
+    "errored" | "error" => SubagentStatus::Errored,
+    "shutdown" => SubagentStatus::Shutdown,
+    "notFound" | "not_found" => SubagentStatus::NotFound,
+    _ => SubagentStatus::Pending,
+  }
+}
+
+fn infer_spawn_nickname(prompt: Option<&str>) -> Option<String> {
+  let prompt = prompt?.trim_start();
+  let rest = prompt.strip_prefix("**")?;
+  let end = rest.find("**")?;
+  let name = rest[..end].trim();
+  (!name.is_empty()).then(|| name.to_string())
+}
+
+fn extract_thread_summary(result: &Value) -> String {
+  let mut summary = String::new();
+  let Some(turns) = result
+    .get("thread")
+    .and_then(|t| t.get("turns"))
+    .and_then(Value::as_array)
+    .or_else(|| result.get("turns").and_then(Value::as_array))
+  else {
+    return summary;
+  };
+  for turn in turns {
+    let Some(items) = turn.get("items").and_then(Value::as_array) else { continue };
+    for item in items {
+      if item.get("type").and_then(Value::as_str) != Some("agentMessage") {
+        continue;
+      }
+      if let Some(text) = item.get("text").and_then(Value::as_str) {
+        summary.push_str(text);
+      }
+      if summary.len() >= 8_000 {
+        summary.truncate(8_000);
+        return summary;
+      }
+    }
+  }
+  summary
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -768,6 +1227,7 @@ mod tests {
         resume: true,
         native_permissions: true,
         skills: true,
+        subagents: true,
       },
       PathBuf::from("/tmp/project"),
       None,
@@ -974,5 +1434,165 @@ mod tests {
     let response: Value = serde_json::from_slice(frames[0].as_bytes()).unwrap();
     assert_eq!(response["id"], 42);
     assert_eq!(response["result"]["decision"], "accept");
+  }
+
+  #[test]
+  fn translates_child_thread_lifecycle_and_bounded_result() {
+    let mut translator = translator();
+    let started = translator
+      .decode(frame(json!({
+        "method": "thread/started",
+        "params": { "thread": {
+          "id": "child-1",
+          "parentThreadId": "parent-1",
+          "agentNickname": "researcher",
+          "agentRole": "research",
+          "preview": "Inspect the repository",
+          "model": "gpt-5.4",
+          "canAcceptDirectInput": true
+        }}
+      })))
+      .unwrap();
+    assert!(matches!(
+      &started[0],
+      EventPayload::SubagentStarted {
+        thread_id,
+        nickname: Some(nickname),
+        prompt: Some(prompt),
+        active_turn_id: None,
+        ..
+      } if thread_id == "child-1" && nickname == "researcher" && prompt == "Inspect the repository"
+    ));
+
+    let delta = "x".repeat(9_000);
+    assert!(
+      translator
+        .decode(frame(json!({
+          "method": "item/agentMessage/delta",
+          "params": { "threadId": "child-1", "itemId": "message-1", "delta": delta }
+        })))
+        .unwrap()
+        .is_empty()
+    );
+    let completed = translator
+      .decode(frame(json!({
+        "method": "turn/completed",
+        "params": {
+          "threadId": "child-1",
+          "turn": { "id": "child-turn-1", "status": "completed" }
+        }
+      })))
+      .unwrap();
+    assert!(matches!(
+      &completed[0],
+      EventPayload::SubagentStatusChanged {
+        thread_id,
+        status: SubagentStatus::Completed,
+        active_turn_id: None,
+        ..
+      } if thread_id == "child-1"
+    ));
+    assert!(matches!(
+      &completed[1],
+      EventPayload::SubagentResult { thread_id, summary }
+        if thread_id == "child-1" && summary.len() == 8_000
+    ));
+
+    let repeated = translator
+      .decode(frame(json!({
+        "method": "turn/completed",
+        "params": {
+          "threadId": "child-1",
+          "turn": { "id": "child-turn-1", "status": "completed" }
+        }
+      })))
+      .unwrap();
+    assert_eq!(repeated.len(), 1, "duplicate completion must not repeat the summary");
+  }
+
+  #[test]
+  fn translates_multiple_child_agents_and_unknown_items() {
+    let mut translator = translator();
+    let events = translator
+      .decode(frame(json!({
+        "method": "item/started",
+        "params": { "item": {
+          "type": "collabAgentToolCall",
+          "id": "collab-1",
+          "prompt": "**Confucius** Review these files",
+          "model": "gpt-5.4",
+          "reasoningEffort": "high",
+          "receiverThreadIds": ["child-1", "child-2"],
+          "agentsStates": {
+            "child-1": { "status": "running" },
+            "child-2": { "status": "pendingInit" }
+          }
+        }}
+      })))
+      .unwrap();
+    assert_eq!(events.len(), 2);
+    assert!(events.iter().all(|event| matches!(
+      event,
+      EventPayload::SubagentStarted {
+        prompt: Some(prompt),
+        nickname: Some(nickname),
+        ..
+      } if prompt == "**Confucius** Review these files" && nickname == "Confucius"
+    )));
+
+    let unknown = translator
+      .decode(frame(json!({
+        "method": "item/started",
+        "params": { "item": { "type": "futureCodexItem", "id": "future-1" } }
+      })))
+      .unwrap();
+    assert!(unknown.is_empty());
+  }
+
+  #[test]
+  fn routes_child_input_interrupt_and_inspection() {
+    let mut translator = translator();
+    translator
+      .decode(frame(json!({
+        "method": "thread/started",
+        "params": { "thread": {
+          "id": "child-1", "parentThreadId": "parent-1"
+        }}
+      })))
+      .unwrap();
+
+    let frames = translator
+      .encode(&SessionCommand::SendSubagentInput {
+        thread_id: "child-1".into(),
+        content: vec![ContentPart::Text { text: "Continue".into() }],
+      })
+      .unwrap();
+    let turn: Value = serde_json::from_slice(frames[0].as_bytes()).unwrap();
+    assert_eq!(turn["method"], "turn/start");
+    assert_eq!(turn["params"]["threadId"], "child-1");
+    assert_eq!(turn["params"]["input"][0]["text"], "Continue");
+
+    translator
+      .decode(frame(json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": { "turn": { "id": "child-turn-1" } }
+      })))
+      .unwrap();
+    let frames = translator
+      .encode(&SessionCommand::InterruptSubagent { thread_id: "child-1".into() })
+      .unwrap();
+    let interrupt: Value = serde_json::from_slice(frames[0].as_bytes()).unwrap();
+    assert_eq!(interrupt["method"], "turn/interrupt");
+    assert_eq!(interrupt["params"]["threadId"], "child-1");
+    assert_eq!(interrupt["params"]["turnId"], "child-turn-1");
+
+    let frames = translator
+      .encode(&SessionCommand::InspectSubagent { thread_id: "child-1".into() })
+      .unwrap();
+    let read: Value = serde_json::from_slice(frames[0].as_bytes()).unwrap();
+    assert_eq!(read["method"], "thread/read");
+    assert_eq!(read["params"]["threadId"], "child-1");
+    assert_eq!(read["params"]["includeTurns"], true);
   }
 }
