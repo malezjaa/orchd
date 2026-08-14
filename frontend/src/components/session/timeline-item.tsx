@@ -13,6 +13,7 @@ import { StreamingResponse } from "@/components/agents/streaming-response"
 import { TodoList } from "@/components/agents/todo-list"
 import { ToolApproval } from "@/components/agents/tool-approval"
 import { ToolResult, ToolResultOutput } from "@/components/agents/tool-result"
+import type { SubagentRecord } from "@/lib/orchd"
 import type { TimelineEvent } from "@/lib/timeline"
 
 export interface TimelineItemProps {
@@ -25,6 +26,7 @@ export interface TimelineItemProps {
   onDeny?: (id: string) => void
   onFileOpen?: (path: string) => void
   onSubagentOpen?: (threadId: string) => void
+  subagents?: readonly Pick<SubagentRecord, "thread_id" | "status">[]
 }
 
 // Deltas arrive in coarse, uneven bursts, so rather than mirroring `text`
@@ -105,6 +107,7 @@ export function TimelineItem({
   onDeny,
   onFileOpen,
   onSubagentOpen,
+  subagents,
 }: TimelineItemProps) {
   const displayText = useStreamedText(
     event.kind === "assistant_text" ? event.text : "",
@@ -120,6 +123,7 @@ export function TimelineItem({
               <AgentMarkdown
                 onFileOpen={onFileOpen}
                 onSubagentOpen={onSubagentOpen}
+                subagents={subagents}
               >
                 {event.text}
               </AgentMarkdown>
@@ -150,6 +154,7 @@ export function TimelineItem({
               }
               onFileOpen={onFileOpen}
               onSubagentOpen={onSubagentOpen}
+              subagents={subagents}
             >
               {displayText}
             </AgentMarkdown>

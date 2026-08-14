@@ -17,6 +17,7 @@ import { SkillMention } from "@/components/agents/skill-mention"
 import { SubagentMention } from "@/components/agents/subagent-mention"
 import { parseHexColor } from "@/lib/markdown-color"
 import { parsePathMention } from "@/lib/markdown-path"
+import type { SubagentRecord } from "@/lib/orchd"
 import { cn } from "@/lib/utils"
 
 export interface AgentMarkdownProps {
@@ -27,6 +28,7 @@ export interface AgentMarkdownProps {
   className?: string
   onFileOpen?: (path: string) => void
   onSubagentOpen?: (threadId: string) => void
+  subagents?: readonly Pick<SubagentRecord, "thread_id" | "status">[]
 }
 
 interface TextLikeNode {
@@ -46,7 +48,7 @@ interface MarkdownNode {
   children?: MarkdownNode[]
 }
 
-const AT_PATH_PATTERN = /(^|[\s([{<'"])(@[\w./-]+)/g
+const AT_PATH_PATTERN = /(^|[\s([{<'"])(@\s*[\w./-]+(?: [\w.-]+)*)/g
 const SLASH_SKILL_PATTERN = /(^|[\s([{<'"])(\/[A-Za-z0-9][\w-]*)(?![\w/-])/g
 const SUBAGENT_PATTERN =
   /(^|[\s([{<'"])(\[\[subagent:([^|\]\s]+)\|([^\]]+)\]\])/g
@@ -221,12 +223,15 @@ function InlineCode({
   children,
   onFileOpen,
   onSubagentOpen,
+  subagents,
   ...props
 }: CodeProps & {
   onFileOpen?: (path: string) => void
   onSubagentOpen?: (threadId: string) => void
+  subagents?: readonly Pick<SubagentRecord, "thread_id" | "status">[]
 }) {
-  const text = getNodeText(node)
+  const text =
+    getNodeText(node) || (typeof children === "string" ? children : "")
   const mention = parsePathMention(text)
   if (mention) {
     return (
@@ -243,10 +248,12 @@ function InlineCode({
   }
   const subagent = /^\[\[subagent:([^|\]\s]+)\|([^\]]+)\]\]$/.exec(text)
   if (subagent) {
+    const agent = subagents?.find((item) => item.thread_id === subagent[1])
     return (
       <SubagentMention
         threadId={subagent[1]}
         name={subagent[2].trim()}
+        status={agent?.status}
         onOpen={onSubagentOpen}
       />
     )
@@ -284,7 +291,8 @@ function PreBlock({ node }: PreProps) {
 
 function createComponents(
   onFileOpen?: (path: string) => void,
-  onSubagentOpen?: (threadId: string) => void
+  onSubagentOpen?: (threadId: string) => void,
+  subagents?: readonly Pick<SubagentRecord, "thread_id" | "status">[]
 ): Components {
   return {
     code: (props) => (
@@ -292,8 +300,31 @@ function createComponents(
         {...props}
         onFileOpen={onFileOpen}
         onSubagentOpen={onSubagentOpen}
+        subagents={subagents}
       />
     ),
+    a: ({ href, children, ...props }) => {
+      const filePath =
+        typeof href === "string" &&
+        !href.startsWith("#") &&
+        !href.startsWith("//") &&
+        !/^[a-z][a-z\d+.-]*:/i.test(href)
+          ? href.replace(/^\.\//, "")
+          : null
+      const mention = filePath ? parsePathMention(filePath) : null
+
+      if (mention?.kind === "file") {
+        return (
+          <FileMention path={mention.path} kind="file" onOpen={onFileOpen} />
+        )
+      }
+
+      return (
+        <a href={href} {...props}>
+          {children}
+        </a>
+      )
+    },
     pre: PreBlock,
     img: ({ alt, src, ...props }) => {
       if (typeof src === "string" && src.startsWith("data:image/")) {
@@ -315,14 +346,15 @@ export const AgentMarkdown = memo(function AgentMarkdown({
   className,
   onFileOpen,
   onSubagentOpen,
+  subagents,
 }: AgentMarkdownProps) {
   const content = useMemo(
     () => (streaming ? remend(children) : children),
     [children, streaming]
   )
   const components = useMemo(
-    () => createComponents(onFileOpen, onSubagentOpen),
-    [onFileOpen, onSubagentOpen]
+    () => createComponents(onFileOpen, onSubagentOpen, subagents),
+    [onFileOpen, onSubagentOpen, subagents]
   )
 
   return (

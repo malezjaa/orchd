@@ -10,7 +10,6 @@ import {
   Pencil,
   Plus,
   RotateCcw,
-  RefreshCw,
   Trash2,
   TriangleAlert,
   Upload,
@@ -386,10 +385,7 @@ function commitDate(commit: GitCommit) {
 
 export function GitPanel({ rootPath }: { rootPath: string }) {
   const { resolvedTheme } = useTheme()
-  const { data, isLoading, isError, refetch, isFetching } = useGitStatus(
-    rootPath,
-    true
-  )
+  const { data, isLoading, isError } = useGitStatus(rootPath, true)
   const { data: info, isLoading: infoLoading } = useGitInfo(rootPath, true)
   const gitAction = useGitAction()
   const [selectedPath, setSelectedPath] = useState<string | null>(null)

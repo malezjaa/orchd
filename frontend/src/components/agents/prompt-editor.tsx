@@ -29,6 +29,7 @@ import {
 } from "@/lib/prompt-content"
 import { cn } from "@/lib/utils"
 import { ImageMention } from "@/components/agents/image-mention"
+import { FileMentionLabel } from "@/components/agents/file-mention"
 import { SkillMention } from "@/components/agents/skill-mention"
 
 interface FileTrigger {
@@ -324,7 +325,9 @@ function FileMentionView({ node }: NodeViewProps) {
       className="not-typeset mx-0.5 inline-flex max-w-full translate-y-0.5 items-center gap-1 rounded-md border border-foreground/20 bg-muted/60 px-1.5 py-0.5 align-baseline font-mono text-[0.85em] leading-none text-foreground/90 dark:border-foreground/25"
     >
       <Icon className="size-3 shrink-0 text-muted-foreground" />
-      <span className="min-w-0 truncate">{label}</span>
+      <span className="min-w-0 truncate">
+        <FileMentionLabel label={label} />
+      </span>
     </NodeViewWrapper>
   )
 }

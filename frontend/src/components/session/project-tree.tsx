@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input"
 import type { GitStatusEntry } from "@/lib/orchd"
 import { useProjectTree } from "@/lib/queries"
 import { useWorkspace } from "@/lib/workspace-context"
-import { Separator } from "@/components/ui/separator"
 
 function FileTreeView({
   paths,

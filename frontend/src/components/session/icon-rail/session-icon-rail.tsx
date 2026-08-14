@@ -49,6 +49,7 @@ export interface SessionInsightsInput {
   state: SessionTimelineState
   context: SessionContext | null
   model?: ModelInfo
+  activeSubagentThreadId: string | null
   onInspectSubagent: (threadId: string) => void
 }
 
@@ -80,6 +81,7 @@ const RAIL_ACTIONS: RailAction[] = [
       insights ? (
         <SubagentList
           subagents={Object.values(insights.state.subagents)}
+          activeThreadId={insights.activeSubagentThreadId}
           onInspect={insights.onInspectSubagent}
         />
       ) : null,
@@ -171,14 +173,6 @@ export function SessionIconRail({
   const subagentCount = insights?.state.subagents
     ? Object.keys(insights.state.subagents).length
     : 0
-  const previousSubagentCount = useRef(subagentCount)
-
-  useEffect(() => {
-    if (previousSubagentCount.current === 0 && subagentCount > 0) {
-      setActive("subagents")
-    }
-    previousSubagentCount.current = subagentCount
-  }, [subagentCount])
 
   const draggingRef = useRef(false)
   const startXRef = useRef(0)
@@ -290,9 +284,16 @@ export function SessionIconRail({
         {RAIL_ACTIONS.map(({ id, label, icon }) => (
           <TooltipIcon
             key={id}
-            label={label}
+            label={
+              id === "subagents" && subagentCount > 0
+                ? `${label}, ${subagentCount}`
+                : label
+            }
             active={active === id}
             onClick={() => handleClick(id)}
+            badge={
+              id === "subagents" && subagentCount > 0 ? subagentCount : null
+            }
           >
             {icon({ className: "size-4" })}
           </TooltipIcon>

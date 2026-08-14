@@ -10,6 +10,7 @@ import * as React from "react"
 interface TooltipIconProps {
   label: string
   active?: boolean
+  badge?: React.ReactNode
   side?: "top" | "right" | "bottom" | "left"
   onClick: () => void
   children: React.ReactNode
@@ -18,6 +19,7 @@ interface TooltipIconProps {
 export function TooltipIcon({
   label,
   active = false,
+  badge,
   side = "left",
   onClick,
   children,
@@ -38,7 +40,17 @@ export function TooltipIcon({
               active && "bg-muted text-foreground"
             )}
           >
-            {children}
+            <span className="relative grid place-items-center">
+              {children}
+              {badge ? (
+                <span
+                  aria-hidden="true"
+                  className="absolute -top-2 -right-2 grid min-w-3.5 place-items-center rounded-full bg-primary px-1 text-[9px] leading-3 font-semibold text-primary-foreground"
+                >
+                  {badge}
+                </span>
+              ) : null}
+            </span>
           </Button>
         }
       />

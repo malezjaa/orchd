@@ -3,6 +3,23 @@
 import { cn } from "@/lib/utils"
 import { getFileIcon } from "@/lib/file-icon.tsx"
 
+export function FileMentionLabel({ label }: { label: string }) {
+  return (
+    <>
+      {label.split("_").map((part, index, parts) => (
+        <span key={`${part}-${index}`}>
+          {part}
+          {index < parts.length - 1 ? (
+            <span className="relative -top-px inline-block font-semibold text-foreground">
+              _
+            </span>
+          ) : null}
+        </span>
+      ))}
+    </>
+  )
+}
+
 export interface FileMentionProps {
   path: string
   kind: "file" | "folder"
@@ -22,7 +39,9 @@ export function FileMention({
   const content = (
     <>
       <Icon className="size-3 shrink-0 text-muted-foreground" />
-      <span className="min-w-0 truncate">{label}</span>
+      <span className="min-w-0 truncate">
+        <FileMentionLabel label={label} />
+      </span>
     </>
   )
   const classNames = cn(

@@ -1,9 +1,12 @@
 import { Bot } from "lucide-react"
+import type { SubagentStatus } from "@/lib/orchd"
+import { subagentTone } from "@/lib/subagent"
 import { cn } from "@/lib/utils"
 
 export interface SubagentMentionProps {
   threadId: string
   name: string
+  status?: SubagentStatus
   onOpen?: (threadId: string) => void
   className?: string
 }
@@ -11,6 +14,7 @@ export interface SubagentMentionProps {
 export function SubagentMention({
   threadId,
   name,
+  status,
   onOpen,
   className,
 }: SubagentMentionProps) {
@@ -22,9 +26,10 @@ export function SubagentMention({
     </>
   )
   const classNames = cn(
-    "not-typeset mx-0.5 inline-flex max-w-full translate-y-0.5 items-center gap-1 rounded-md border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 align-baseline text-[0.85em] leading-none text-sky-700 transition-colors dark:border-sky-400/30 dark:bg-sky-400/10 dark:text-sky-300",
+    "not-typeset mx-0.5 inline-flex max-w-full translate-y-0.5 items-center gap-1 rounded-md px-1.5 py-0.5 align-baseline text-[0.85em] leading-none transition-colors",
+    subagentTone(status ?? "running"),
     interactive &&
-      "cursor-pointer hover:border-sky-500/50 hover:bg-sky-500/15 hover:text-sky-800 active:scale-[0.98] dark:hover:border-sky-400/50 dark:hover:bg-sky-400/15 dark:hover:text-sky-200",
+      "cursor-pointer hover:brightness-110 active:scale-[0.98]",
     className
   )
 

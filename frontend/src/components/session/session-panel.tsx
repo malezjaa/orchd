@@ -544,6 +544,7 @@ export function SessionPanel() {
     currentTab.type === "subagent"
       ? (state.subagents[currentTab.threadId] ?? null)
       : null
+  const subagents = useMemo(() => Object.values(state.subagents), [state.subagents])
   const activeFilePath =
     fileTreeRoot && activeFile
       ? `${fileTreeRoot.replace(/\/+$/, "")}/${activeFile}`
@@ -697,7 +698,7 @@ export function SessionPanel() {
         onTitleAnimationComplete={handleTitleAnimationComplete}
       />
 
-      <FileTabs subagents={Object.values(state.subagents)} />
+      <FileTabs subagents={subagents} />
 
       <div className="flex min-h-0 flex-1">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -727,6 +728,7 @@ export function SessionPanel() {
                             onDeny={handleDeny}
                             onFileOpen={handleFileOpen}
                             onSubagentOpen={handleSubagentOpen}
+                            subagents={subagents}
                           />
                         ) : null}
                         {group.work.length > 0 || working ? (
@@ -748,6 +750,7 @@ export function SessionPanel() {
                                 onDeny={handleDeny}
                                 onFileOpen={handleFileOpen}
                                 onSubagentOpen={handleSubagentOpen}
+                                subagents={subagents}
                               />
                             ))}
                           </TurnWork>
@@ -762,6 +765,7 @@ export function SessionPanel() {
                             onDeny={handleDeny}
                             onFileOpen={handleFileOpen}
                             onSubagentOpen={handleSubagentOpen}
+                            subagents={subagents}
                           />
                         ))}
                       </Fragment>
@@ -795,6 +799,8 @@ export function SessionPanel() {
               agentKind={session.agent_kind}
               filePaths={projectTree?.files}
               skills={skills}
+              onFileOpen={handleFileOpen}
+              subagents={subagents}
               onSend={sendSubagentInput}
               onInterrupt={interruptSubagent}
               onInspect={inspectSubagent}
@@ -828,6 +834,8 @@ export function SessionPanel() {
             state,
             context: context ?? null,
             model: liveCatalogEntry,
+            activeSubagentThreadId:
+              currentTab.type === "subagent" ? currentTab.threadId : null,
             onInspectSubagent: handleSubagentOpen,
           }}
         />

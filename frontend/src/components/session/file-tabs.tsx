@@ -1,10 +1,15 @@
-import { Bot, MessageSquare, XIcon } from "lucide-react"
+import { MessageSquare, XIcon } from "lucide-react"
 import { getFileIcon } from "@/lib/file-icon.tsx"
 import { cn } from "@/lib/utils.ts"
 import { Separator } from "@/components/ui/separator.tsx"
 import { useWorkspace, type CurrentTab } from "@/lib/workspace-context"
 import type { SubagentRecord } from "@/lib/orchd"
-import { subagentLabel, subagentTone } from "@/lib/subagent"
+import {
+  subagentLabel,
+  subagentStatusIcon,
+  subagentStatusLabel,
+  subagentTone,
+} from "@/lib/subagent"
 
 function OpenedFile({
   file,
@@ -70,9 +75,10 @@ export function FileTabs({ subagents = [] }: { subagents?: SubagentRecord[] }) {
   const { currentTab, switchActiveTab, openedFiles, closeFile } = useWorkspace()
 
   return (
-    <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border px-2">
+    <div className="flex h-10 min-w-0 shrink-0 items-center gap-1 overflow-hidden border-b border-border px-2">
       <button
         type="button"
+        aria-current={currentTab.type === "session" ? "page" : undefined}
         onClick={() => switchActiveTab({ type: "session" })}
         className={cn(
           "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium whitespace-nowrap transition-colors outline-none select-none",
@@ -90,38 +96,56 @@ export function FileTabs({ subagents = [] }: { subagents?: SubagentRecord[] }) {
         <Separator orientation="vertical" className="my-2" />
       ) : null}
 
-      {subagents.map((agent) => {
-        const active =
-          currentTab.type === "subagent" &&
-          currentTab.threadId === agent.thread_id
-        return (
-          <button
-            key={`subagent-${agent.thread_id}`}
-            type="button"
-            onClick={() =>
-              switchActiveTab({ type: "subagent", threadId: agent.thread_id })
-            }
-            title={agent.prompt ?? agent.thread_id}
-            className={cn(
-              "inline-flex h-7 max-w-52 shrink-0 items-center gap-1.5 rounded-lg px-2 text-[13px] font-medium whitespace-nowrap transition-colors outline-none select-none",
-              "focus-visible:ring-2 focus-visible:ring-ring",
-              active
-                ? "bg-muted/70 text-foreground"
-                : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-            )}
-          >
-            <span
-              className={cn(
-                "grid size-5 shrink-0 place-items-center rounded-md",
-                subagentTone(agent.status)
-              )}
-            >
-              <Bot className="size-3.5" />
-            </span>
-            <span className="truncate">{subagentLabel(agent)}</span>
-          </button>
-        )
-      })}
+      {subagents.length > 0 ? (
+        <div
+          role="tablist"
+          aria-label="Open subagents"
+          className="flex max-w-[42%] min-w-0 shrink scrollbar-none items-center gap-1 overflow-x-auto"
+        >
+          {subagents.map((agent) => {
+            const active =
+              currentTab.type === "subagent" &&
+              currentTab.threadId === agent.thread_id
+            const name = subagentLabel(agent)
+            const status = subagentStatusLabel(agent.status)
+            const StatusIcon = subagentStatusIcon(agent.status)
+
+            return (
+              <button
+                key={`subagent-${agent.thread_id}`}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() =>
+                  switchActiveTab({
+                    type: "subagent",
+                    threadId: agent.thread_id,
+                  })
+                }
+                title={`${name} · ${status}`}
+                aria-label={`${name}, ${status}`}
+                className={cn(
+                  "inline-flex h-7 max-w-52 shrink-0 items-center gap-1.5 rounded-lg px-2 text-[13px] font-medium whitespace-nowrap transition-colors outline-none select-none",
+                  "focus-visible:ring-2 focus-visible:ring-ring",
+                  active
+                    ? "bg-muted/70 text-foreground"
+                    : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                )}
+              >
+                <span
+                  className={cn(
+                    "grid size-5 shrink-0 place-items-center rounded-md",
+                    subagentTone(agent.status)
+                  )}
+                >
+                  <StatusIcon className="size-3.5" aria-hidden="true" />
+                </span>
+                <span className="truncate">{name}</span>
+              </button>
+            )
+          })}
+        </div>
+      ) : null}
 
       {subagents.length > 0 && openedFiles.length > 0 ? (
         <Separator orientation="vertical" className="my-2" />
