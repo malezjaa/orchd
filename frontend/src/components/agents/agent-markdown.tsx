@@ -320,7 +320,12 @@ function createComponents(
       }
 
       return (
-        <a href={href} {...props}>
+        <a
+          href={href}
+          {...props}
+          target="_blank"
+          rel="noreferrer noopener"
+        >
           {children}
         </a>
       )

@@ -100,16 +100,6 @@ export function SubagentConversation({
           <p className="shrink-0 text-xs font-medium text-foreground">
             {statusLabel}
           </p>
-          <span
-            className="size-1 shrink-0 rounded-full bg-muted-foreground/40"
-            aria-hidden="true"
-          />
-          <p
-            className="min-w-0 truncate text-xs leading-4 text-muted-foreground"
-            title={statusMessage}
-          >
-            {statusMessage}
-          </p>
           {canInterrupt ? (
             <Button
               type="button"

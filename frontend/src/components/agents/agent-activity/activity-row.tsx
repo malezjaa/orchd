@@ -100,7 +100,12 @@ function SearchResultRow({ result }: { result: AgentSearchResult }) {
   )
 
   return result.url ? (
-    <a href={result.url} className={className}>
+    <a
+      href={result.url}
+      target="_blank"
+      rel="noreferrer noopener"
+      className={className}
+    >
       {content}
     </a>
   ) : (

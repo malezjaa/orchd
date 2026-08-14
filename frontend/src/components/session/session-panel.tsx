@@ -142,6 +142,73 @@ function ProjectPicker({
   )
 }
 
+function LandingQuestion({
+  prompt,
+  project,
+  onProjectClick,
+}: {
+  prompt: string
+  project: ProjectRecord | null
+  onProjectClick?: () => void
+}) {
+  const reduce = useReducedMotion() ?? false
+
+  return (
+    <p className="text-xl font-medium tracking-tight text-foreground sm:text-2xl">
+      <span className="inline-grid align-baseline">
+        <AnimatePresence initial={false} mode="wait">
+          <motion.span
+            key={prompt}
+            initial={{
+              opacity: 0,
+              transform: reduce ? "translateY(0)" : "translateY(0.4em)",
+            }}
+            animate={{ opacity: 1, transform: "translateY(0)" }}
+            exit={{
+              opacity: 0,
+              transform: reduce ? "translateY(0)" : "translateY(-0.4em)",
+            }}
+            transition={
+              reduce
+                ? { duration: 0.12 }
+                : {
+                    duration: 0.22,
+                    ease: [0.23, 1, 0.32, 1],
+                  }
+            }
+            className="col-start-1 row-start-1 whitespace-nowrap"
+          >
+            {prompt}
+          </motion.span>
+        </AnimatePresence>
+      </span>{" "}
+      {onProjectClick ? (
+        <button
+          type="button"
+          onClick={onProjectClick}
+          className="inline-flex max-w-full items-center gap-1 rounded-md text-primary underline decoration-primary/30 underline-offset-4 transition-colors outline-none hover:decoration-primary/70 focus-visible:ring-2 focus-visible:ring-ring/50"
+        >
+          <span className="truncate">{project?.name ?? "a project"}</span>
+          <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+        </button>
+      ) : (
+        <span className="text-primary">
+          {project?.name ?? "a project"}
+        </span>
+      )}
+      <span>?</span>
+    </p>
+  )
+}
+
+function LandingHint() {
+  return (
+    <p className="mt-2 text-center text-sm text-muted-foreground">
+      Describe an idea and let your agent take it from there.
+    </p>
+  )
+}
+
 function LandingState({
   prompt,
   project,
@@ -153,53 +220,16 @@ function LandingState({
   onProjectClick: () => void
   composer: ReactNode
 }) {
-  const reduce = useReducedMotion() ?? false
-
   return (
     <main className="flex min-h-0 flex-1 items-center justify-center px-4 py-8">
       <div className="w-full max-w-2xl -translate-y-3">
         <div className="mb-4 text-center">
-          <p className="text-xl font-medium tracking-tight text-foreground sm:text-2xl">
-            <span className="inline-grid align-baseline">
-              <AnimatePresence initial={false} mode="wait">
-                <motion.span
-                  key={prompt}
-                  initial={{
-                    opacity: 0,
-                    transform: reduce ? "translateY(0)" : "translateY(0.4em)",
-                  }}
-                  animate={{ opacity: 1, transform: "translateY(0)" }}
-                  exit={{
-                    opacity: 0,
-                    transform: reduce ? "translateY(0)" : "translateY(-0.4em)",
-                  }}
-                  transition={
-                    reduce
-                      ? { duration: 0.12 }
-                      : {
-                          duration: 0.22,
-                          ease: [0.23, 1, 0.32, 1],
-                        }
-                  }
-                  className="col-start-1 row-start-1 whitespace-nowrap"
-                >
-                  {prompt}
-                </motion.span>
-              </AnimatePresence>
-            </span>{" "}
-            <button
-              type="button"
-              onClick={onProjectClick}
-              className="inline-flex max-w-full items-center gap-1 rounded-md text-primary underline decoration-primary/30 underline-offset-4 transition-colors outline-none hover:decoration-primary/70 focus-visible:ring-2 focus-visible:ring-ring/50"
-            >
-              <span className="truncate">{project?.name ?? "a project"}</span>
-              <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
-            </button>
-            <span>?</span>
-          </p>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Describe an idea and let your agent take it from there.
-          </p>
+          <LandingQuestion
+            prompt={prompt}
+            project={project}
+            onProjectClick={onProjectClick}
+          />
+          <LandingHint />
         </div>
         {composer}
       </div>
@@ -639,42 +669,47 @@ export function SessionPanel() {
     return (
       <div className="flex h-full min-h-0 flex-1 flex-col">
         <DraftHeader draft={draft} agentKind={configuredAgentKind} />
-        <div className="grid flex-1 place-items-center px-4 text-center">
-          <div>
-            <p className="text-sm font-medium text-foreground">New session</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Send a message to start. Nothing is saved until you do.
-            </p>
+        <main className="flex min-h-0 flex-1 items-center justify-center px-4 py-8">
+          <div className="w-full max-w-2xl -translate-y-3">
+            <div className="mb-4 text-center">
+              <LandingQuestion
+                prompt={LANDING_PROMPTS[landingPromptIndex]}
+                project={draft.project}
+              />
+            </div>
+            <SessionComposer
+              agentKind={configuredAgentKind}
+              loading={createSession.isPending}
+              disabled={createSession.isPending}
+              onStop={() => {}}
+              onSubmit={handleDraftSubmit}
+              centered
+              models={models}
+              currentModel={draftSettings.model ?? configuredModelId}
+              currentEffort={draftSettings.effort ?? configuredReasoningEffort}
+              currentFastMode={draftSettings.fastMode}
+              onModelChange={(model) =>
+                setDraftSettings((prev) => ({ ...prev, model }))
+              }
+              onModeChange={(mode) =>
+                setDraftSettings((prev) => ({ ...prev, mode }))
+              }
+              onThinkingChange={(effort) =>
+                setDraftSettings((prev) => ({ ...prev, effort }))
+              }
+              onFastModeChange={(fastMode) =>
+                setDraftSettings((prev) => ({ ...prev, fastMode }))
+              }
+              onPermissionPreset={(permissionRules) =>
+                setDraftSettings((prev) => ({ ...prev, permissionRules }))
+              }
+              filePaths={projectTree?.files}
+              skills={skills}
+              placeholder="Describe what you want to build…"
+            />
+            <LandingHint />
           </div>
-        </div>
-        <SessionComposer
-          agentKind={configuredAgentKind}
-          loading={createSession.isPending}
-          disabled={createSession.isPending}
-          onStop={() => {}}
-          onSubmit={handleDraftSubmit}
-          models={models}
-          currentModel={draftSettings.model ?? configuredModelId}
-          currentEffort={draftSettings.effort ?? configuredReasoningEffort}
-          currentFastMode={draftSettings.fastMode}
-          onModelChange={(model) =>
-            setDraftSettings((prev) => ({ ...prev, model }))
-          }
-          onModeChange={(mode) =>
-            setDraftSettings((prev) => ({ ...prev, mode }))
-          }
-          onThinkingChange={(effort) =>
-            setDraftSettings((prev) => ({ ...prev, effort }))
-          }
-          onFastModeChange={(fastMode) =>
-            setDraftSettings((prev) => ({ ...prev, fastMode }))
-          }
-          onPermissionPreset={(permissionRules) =>
-            setDraftSettings((prev) => ({ ...prev, permissionRules }))
-          }
-          filePaths={projectTree?.files}
-          skills={skills}
-        />
+        </main>
       </div>
     )
   }

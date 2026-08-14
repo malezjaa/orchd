@@ -3,6 +3,15 @@ import { describe, expect, it } from "vite-plus/test"
 import { AgentMarkdown } from "@/components/agents/agent-markdown"
 
 describe("AgentMarkdown file mentions", () => {
+  it("opens response links in a new tab", () => {
+    const markup = renderToStaticMarkup(
+      <AgentMarkdown>[OpenAI](https://openai.com)</AgentMarkdown>
+    )
+
+    expect(markup).toContain('target="_blank"')
+    expect(markup).toContain('rel="noreferrer noopener"')
+  })
+
   it("keeps file links in the app when no opener is available", () => {
     const markup = renderToStaticMarkup(
       <AgentMarkdown>[file_tree.rs](file_tree.rs)</AgentMarkdown>
