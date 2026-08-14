@@ -19,6 +19,7 @@ import type {
   PromptOption,
 } from "@/components/agents/prompt-input"
 import { PromptInput } from "@/components/agents/prompt-input"
+import { ToolApproval } from "@/components/agents/tool-approval"
 import type {
   AgentMode,
   AgentSkill,
@@ -34,6 +35,7 @@ import {
   MODEL_PROVIDER_LABEL,
 } from "@/lib/orchd"
 import { cn } from "@/lib/utils"
+import type { PermissionEvent } from "@/lib/timeline"
 
 export interface SessionComposerProps {
   agentKind: string
@@ -59,6 +61,10 @@ export interface SessionComposerProps {
   skills?: readonly AgentSkill[]
   centered?: boolean
   placeholder?: string
+  pendingApprovals?: PermissionEvent[]
+  onApproval?: (id: string) => void
+  onAlwaysAllowApproval?: (id: string) => void
+  onDenyApproval?: (id: string) => void
 }
 
 const MODES: PromptOption[] = [
@@ -205,6 +211,10 @@ export function SessionComposer({
   skills = [],
   centered = false,
   placeholder,
+  pendingApprovals = [],
+  onApproval,
+  onAlwaysAllowApproval,
+  onDenyApproval,
 }: SessionComposerProps) {
   const [selectedModel, setSelectedModel] = useState<string | undefined>(
     currentModel ?? undefined
@@ -291,6 +301,30 @@ export function SessionComposer({
   return (
     <div className={cn("shrink-0 p-3", centered && "w-full p-0")}>
       <div className={cn("mx-auto max-w-3xl", centered && "max-w-2xl")}>
+        {pendingApprovals.length > 0 ? (
+          <div className="mb-2.5 space-y-2" aria-label="Pending approvals">
+            <div className="flex items-center gap-2 px-1 text-[11px] font-medium text-amber-400">
+              <span className="size-1.5 rounded-full bg-amber-400" aria-hidden="true" />
+              Needs your approval
+              <span className="text-muted-foreground">{pendingApprovals.length}</span>
+            </div>
+            {pendingApprovals.map((approval) => (
+              <ToolApproval
+                key={approval.id}
+                compact
+                tool={approval.tool}
+                title={approval.title}
+                description={approval.description}
+                parameters={approval.parameters}
+                status={approval.status}
+                defaultOpen
+                onApprove={() => onApproval?.(approval.id)}
+                onAlwaysAllow={() => onAlwaysAllowApproval?.(approval.id)}
+                onDeny={() => onDenyApproval?.(approval.id)}
+              />
+            ))}
+          </div>
+        ) : null}
         <PromptInput
           loading={loading}
           disabled={disabled}

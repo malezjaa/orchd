@@ -59,6 +59,7 @@ export interface ToolApprovalProps {
   onApprove?: () => void
   onAlwaysAllow?: () => void
   onDeny?: () => void
+  compact?: boolean
   className?: string
 }
 
@@ -114,6 +115,7 @@ export function ToolApproval({
   onApprove,
   onAlwaysAllow,
   onDeny,
+  compact = false,
   className,
 }: ToolApprovalProps) {
   const reduce = useReducedMotion() ?? false
@@ -146,14 +148,16 @@ export function ToolApproval({
       aria-busy={busy}
       className={cn(
         "w-full overflow-hidden rounded-2xl border border-border/60 bg-muted/20 text-sm",
+        compact && "rounded-xl",
         className
       )}
     >
-      <div className="flex items-start gap-3 p-4">
+      <div className={cn("flex items-start gap-3 p-4", compact && "gap-2.5 p-2.5")}>
         <span
           aria-hidden="true"
           className={cn(
             "mt-0.5 grid size-8 shrink-0 place-items-center rounded-xl border border-border/60 bg-background text-muted-foreground",
+            compact && "size-7 rounded-lg",
             error && "text-destructive"
           )}
         >
@@ -188,7 +192,7 @@ export function ToolApproval({
             </span>
           </div>
           {description ? (
-            <p className="mt-2 leading-5 text-muted-foreground">
+            <p className={cn("mt-2 leading-5 text-muted-foreground", compact && "mt-1 text-xs leading-4 line-clamp-2")}>
               {description}
             </p>
           ) : null}
@@ -199,7 +203,7 @@ export function ToolApproval({
               aria-expanded={currentOpen}
               aria-controls={detailsId}
               onClick={() => setOpen(!currentOpen)}
-              className="mt-2 inline-flex items-center gap-1 rounded-md text-xs font-medium text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              className={cn("mt-2 inline-flex items-center gap-1 rounded-md text-xs font-medium text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring", compact && "mt-1")}
             >
               View details
               <motion.span
@@ -215,7 +219,7 @@ export function ToolApproval({
       </div>
 
       <AgentDisclosure id={detailsId} open={currentOpen}>
-        <dl className="mx-4 mb-4 grid gap-2 rounded-xl border border-border/50 bg-background/70 p-3">
+        <dl className={cn("mx-4 mb-4 grid gap-2 rounded-xl border border-border/50 bg-background/70 p-3", compact && "mx-2.5 mb-2.5 p-2.5")}>
           {parameters.map((parameter) => (
             <div
               key={parameter.id}
@@ -237,7 +241,7 @@ export function ToolApproval({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
             transition={{ duration: reduce ? 0.12 : 0.22, ease: EASE_OUT }}
-            className="flex flex-wrap items-center gap-2 border-t border-border/60 px-4 py-3"
+            className={cn("flex flex-wrap items-center gap-2 border-t border-border/60 px-4 py-3", compact && "gap-1.5 px-2.5 py-2")}
           >
             <motion.button
               type="button"

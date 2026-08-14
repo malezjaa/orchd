@@ -49,7 +49,8 @@ import {
   useProjectTree,
   useSettings,
 } from "@/lib/queries"
-import { finalAssistantTextIds, isHiddenToolCall } from "@/lib/timeline"
+import { isHiddenToolCall } from "@/lib/timeline"
+import type { PermissionEvent } from "@/lib/timeline"
 import { groupTimelineByTurn, turnDurationSeconds } from "@/lib/timeline-groups"
 import { useWorkspace, type DraftSession } from "@/lib/workspace-context"
 import {
@@ -527,10 +528,6 @@ export function SessionPanel() {
     () => state.events.filter((event) => !isHiddenToolCall(event)),
     [state.events]
   )
-  const finalTextIds = useMemo(
-    () => finalAssistantTextIds(visibleEvents),
-    [visibleEvents]
-  )
   const turnGroups = useMemo(
     () => groupTimelineByTurn(visibleEvents),
     [visibleEvents]
@@ -575,6 +572,14 @@ export function SessionPanel() {
       ? (state.subagents[currentTab.threadId] ?? null)
       : null
   const subagents = useMemo(() => Object.values(state.subagents), [state.subagents])
+  const pendingApprovals = useMemo(
+    () =>
+      state.events.filter(
+        (event): event is PermissionEvent =>
+          event.kind === "permission" && event.status === "pending"
+      ),
+    [state.events]
+  )
   const activeFilePath =
     fileTreeRoot && activeFile
       ? `${fileTreeRoot.replace(/\/+$/, "")}/${activeFile}`
@@ -764,6 +769,7 @@ export function SessionPanel() {
                             onFileOpen={handleFileOpen}
                             onSubagentOpen={handleSubagentOpen}
                             subagents={subagents}
+                            showPermission={false}
                           />
                         ) : null}
                         {group.work.length > 0 || working ? (
@@ -786,6 +792,7 @@ export function SessionPanel() {
                                 onFileOpen={handleFileOpen}
                                 onSubagentOpen={handleSubagentOpen}
                                 subagents={subagents}
+                                showPermission={false}
                               />
                             ))}
                           </TurnWork>
@@ -794,13 +801,14 @@ export function SessionPanel() {
                           <TimelineItem
                             key={event.id}
                             event={event}
-                            showFooter={finalTextIds.has(event.id)}
+                            showFooter={event.id === group.texts.at(-1)?.id}
                             onApprove={handleApprove}
                             onAlwaysAllow={handleAlwaysAllow}
                             onDeny={handleDeny}
                             onFileOpen={handleFileOpen}
                             onSubagentOpen={handleSubagentOpen}
                             subagents={subagents}
+                            showPermission={false}
                           />
                         ))}
                       </Fragment>
@@ -825,6 +833,10 @@ export function SessionPanel() {
                 contextUsage={contextUsage}
                 filePaths={projectTree?.files}
                 skills={skills}
+                pendingApprovals={pendingApprovals}
+                onApproval={handleApprove}
+                onAlwaysAllowApproval={handleAlwaysAllow}
+                onDenyApproval={handleDeny}
               />
             </>
           ) : currentTab.type === "subagent" && activeSubagent ? (
@@ -840,6 +852,10 @@ export function SessionPanel() {
               onInterrupt={interruptSubagent}
               onInspect={inspectSubagent}
               onSubagentOpen={handleSubagentOpen}
+              pendingApprovals={pendingApprovals}
+              onApproval={handleApprove}
+              onAlwaysAllowApproval={handleAlwaysAllow}
+              onDenyApproval={handleDeny}
             />
           ) : currentTab.type === "path" &&
             activeFilePath &&

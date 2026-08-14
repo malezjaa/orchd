@@ -760,11 +760,37 @@ impl SessionActor {
           .await;
       }
       EventPayload::SubagentResult { thread_id, summary } => {
+        if let Err(err) = self
+          .store
+          .update_subagent_status(
+            self.id,
+            &thread_id,
+            orchd_core::SubagentStatus::Completed,
+            None,
+            Some(true),
+            None,
+          )
+          .await
+        {
+          tracing::debug!(session = %self.id, thread = %thread_id, error = %err, "failed to finalize subagent status");
+        }
         if let Err(err) =
           self.store.set_subagent_result(self.id, &thread_id, &summary).await
         {
           tracing::debug!(session = %self.id, thread = %thread_id, error = %err, "failed to persist subagent result");
         }
+        self
+          .emit(
+            EventPayload::SubagentStatusChanged {
+              thread_id: thread_id.clone(),
+              status: orchd_core::SubagentStatus::Completed,
+              message: None,
+              can_accept_direct_input: Some(true),
+              active_turn_id: None,
+            },
+            self.lifecycle.current_turn(),
+          )
+          .await;
         self
           .emit(
             EventPayload::SubagentResult { thread_id, summary },

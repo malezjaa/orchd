@@ -599,6 +599,16 @@ impl CodexTranslator {
       ),
       _ => return Ok(vec![]),
     };
+    if canonical == CanonicalTool::ShellExec
+      && input
+        .get("command")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .map(str::is_empty)
+        .unwrap_or(true)
+    {
+      return Ok(vec![]);
+    }
     let call_id = ToolCallId::new();
     self.native_calls.insert(item_id.to_string(), call_id);
     self.native_inputs.insert(item_id.to_string(), input.clone());
@@ -905,16 +915,26 @@ impl CodexTranslator {
     };
     let status = match item.get("kind").and_then(Value::as_str) {
       Some("started") | Some("interacted") => SubagentStatus::Running,
+      Some("completed") | Some("done") => SubagentStatus::Completed,
       Some("interrupted") => SubagentStatus::Interrupted,
+      Some("errored") | Some("error") | Some("failed") => SubagentStatus::Errored,
+      Some("shutdown") => SubagentStatus::Shutdown,
       _ => SubagentStatus::Pending,
     };
+    let active_turn_id = if matches!(status, SubagentStatus::Running) {
+      item.get("turnId").and_then(Value::as_str).map(str::to_string)
+    } else {
+      None
+    };
     self.subagents.entry(thread_id.to_string()).or_default().status = status.clone();
+    self.subagents.entry(thread_id.to_string()).or_default().active_turn_id =
+      active_turn_id.clone();
     Ok(vec![EventPayload::SubagentStatusChanged {
       thread_id: thread_id.to_string(),
       status,
       message: None,
       can_accept_direct_input: None,
-      active_turn_id: None,
+      active_turn_id,
     }])
   }
 
@@ -1453,6 +1473,37 @@ mod tests {
         ..
       } if value[0]["url"] == "https://blog.rust-lang.org/releases/"
     ));
+  }
+
+  #[test]
+  fn ignores_empty_command_items() {
+    let mut translator = translator();
+    let started = translator
+      .decode(frame(json!({
+        "method": "item/started",
+        "params": { "item": {
+          "type": "commandExecution",
+          "id": "empty-command",
+          "command": "  \n",
+          "cwd": "/tmp/project"
+        }}
+      })))
+      .unwrap();
+    assert!(started.is_empty());
+
+    let completed = translator
+      .decode(frame(json!({
+        "method": "item/completed",
+        "params": { "item": {
+          "type": "commandExecution",
+          "id": "empty-command",
+          "command": "  \n",
+          "status": "completed",
+          "aggregatedOutput": ""
+        }}
+      })))
+      .unwrap();
+    assert!(completed.is_empty());
   }
 
   #[test]

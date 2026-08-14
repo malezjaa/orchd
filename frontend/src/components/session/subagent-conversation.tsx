@@ -15,10 +15,10 @@ import {
 import { MessageFooterStrip } from "@/components/agents/message-footer-strip"
 import type { SubagentMessage } from "@/lib/session-timeline"
 import type { AgentSkill, ContentPart, SubagentRecord } from "@/lib/orchd"
+import type { PermissionEvent } from "@/lib/timeline"
 import { cn } from "@/lib/utils"
 import {
   subagentLabel,
-  subagentStatusDescription,
   subagentStatusIcon,
   subagentStatusLabel,
   subagentTone,
@@ -36,6 +36,10 @@ interface SubagentConversationProps {
   onInterrupt: (threadId: string) => void
   onInspect: (threadId: string) => void
   onSubagentOpen?: (threadId: string) => void
+  pendingApprovals?: PermissionEvent[]
+  onApproval?: (id: string) => void
+  onAlwaysAllowApproval?: (id: string) => void
+  onDenyApproval?: (id: string) => void
 }
 
 export function SubagentConversation({
@@ -50,6 +54,10 @@ export function SubagentConversation({
   onInterrupt,
   onInspect,
   onSubagentOpen,
+  pendingApprovals,
+  onApproval,
+  onAlwaysAllowApproval,
+  onDenyApproval,
 }: SubagentConversationProps) {
   const name = subagentLabel(agent)
   const canSend =
@@ -58,7 +66,6 @@ export function SubagentConversation({
     agent.status !== "shutdown"
   const canInterrupt = agent.status === "running"
   const statusLabel = subagentStatusLabel(agent.status)
-  const statusMessage = agent.message ?? subagentStatusDescription(agent.status)
   const StatusIcon = subagentStatusIcon(agent.status)
   const visibleMessages =
     messages.length > 0
@@ -200,6 +207,10 @@ export function SubagentConversation({
         onSubmit={(text, content) => onSend(agent.thread_id, text, content)}
         filePaths={filePaths}
         skills={skills}
+        pendingApprovals={pendingApprovals}
+        onApproval={onApproval}
+        onAlwaysAllowApproval={onAlwaysAllowApproval}
+        onDenyApproval={onDenyApproval}
         placeholder={
           canSend ? `Message ${name}…` : "Child thread is unavailable"
         }

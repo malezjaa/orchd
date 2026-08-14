@@ -268,6 +268,10 @@ function applySubagentEvent(
       ...current,
       [event.thread_id]: {
         ...previous,
+        // A result is terminal even if the adapter omitted a separate
+        // completed-status notification.
+        status: "completed",
+        active_turn_id: null,
         summary: event.summary,
         updated_at: event.ts,
       },

@@ -27,6 +27,7 @@ export interface TimelineItemProps {
   onFileOpen?: (path: string) => void
   onSubagentOpen?: (threadId: string) => void
   subagents?: readonly Pick<SubagentRecord, "thread_id" | "status">[]
+  showPermission?: boolean
 }
 
 // Deltas arrive in coarse, uneven bursts, so rather than mirroring `text`
@@ -108,6 +109,7 @@ export function TimelineItem({
   onFileOpen,
   onSubagentOpen,
   subagents,
+  showPermission = true,
 }: TimelineItemProps) {
   const displayText = useStreamedText(
     event.kind === "assistant_text" ? event.text : "",
@@ -143,7 +145,7 @@ export function TimelineItem({
           <StreamingResponse
             status={event.streaming ? "streaming" : "complete"}
             showActions={!event.streaming}
-            sources={event.sources}
+            sources={showFooter ? event.sources : undefined}
           >
             {/* The reveal can still be catching up after `streaming`
             flips false, so keep the incomplete-markdown patching on
@@ -196,6 +198,7 @@ export function TimelineItem({
       )
 
     case "permission":
+      if (!showPermission) return null
       return (
         <ToolApproval
           tool={event.tool}

@@ -13,9 +13,23 @@ import type { SubagentRecord, SubagentStatus } from "@/lib/orchd"
 export function subagentLabel(agent: SubagentRecord): string {
   if (agent.nickname) return agent.nickname
   const bold = /^\s*\*\*([^*]+)\*\*/.exec(agent.prompt ?? "")
-  return (
-    bold?.[1]?.trim() || agent.role || `Agent ${agent.thread_id.slice(0, 8)}`
-  )
+  if (bold?.[1]?.trim()) return bold[1].trim()
+  if (agent.role) return agent.role
+
+  // Older Codex versions do not always provide a nickname. Use the task
+  // preview instead of exposing an opaque thread-id fragment in the UI.
+  const preview = (agent.prompt ?? "")
+    .replace(/^\s*[-*#>]+\s*/, "")
+    .replace(/[`*_]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+  if (preview) {
+    const firstSentence = preview.split(/[.!?]\s+/)[0] ?? preview
+    return firstSentence.length > 34
+      ? `${firstSentence.slice(0, 31).trimEnd()}…`
+      : firstSentence
+  }
+  return "Subagent"
 }
 
 export function subagentTone(status: SubagentStatus): string {

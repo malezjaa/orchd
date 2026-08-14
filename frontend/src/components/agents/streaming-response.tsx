@@ -31,7 +31,9 @@ export interface StreamingResponseProps {
   // Overrides the built-in clipboard action.
   onCopy?: () => void | Promise<void>
   onRetry?: () => void
-  // Sources shown as a compact footer disclosure after streaming.
+  // Sources shown as a compact footer disclosure after streaming. The parent
+  // decides which text block owns the disclosure so a turn with several
+  // streamed blocks does not repeat it.
   sources?: CitationItem[]
   sourcesOpen?: boolean
   defaultSourcesOpen?: boolean
