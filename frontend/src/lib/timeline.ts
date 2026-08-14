@@ -22,6 +22,7 @@ import type {
 } from "@/components/agents/tool-result"
 import type { TodoItem } from "@/components/agents/todo-list"
 import type { ContentPart, PermissionKind, PermissionScope } from "@/lib/orchd"
+import type { ToolIconName } from "@/lib/tool-presentation"
 
 export interface UserMessageEvent {
   id: string
@@ -81,6 +82,7 @@ export interface ToolResultEvent {
   kind: "tool_result"
   tool: string
   title: string
+  iconName: ToolIconName
   status: ToolResultStatus
   resultKind: ToolResultKind
   output: string

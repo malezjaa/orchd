@@ -208,7 +208,7 @@ export function StreamingResponse({
                 <CitationList
                   citations={sources}
                   idPrefix={resolvedSourcePrefix}
-                  className="mt-2 rounded-xl bg-muted p-2"
+                  className="mt-2 rounded-lg border border-border/70 bg-background/70 p-1.5 shadow-xs"
                 />
               </AgentDisclosure>
             ) : null}

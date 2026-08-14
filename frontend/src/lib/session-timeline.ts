@@ -4,6 +4,7 @@
 // row instead of appending duplicates.
 
 import type { ToolResultKind } from "@/components/agents/tool-result"
+import type { CitationItem } from "@/components/agents/citations"
 import type {
   ContentPart,
   PermissionKind,
@@ -17,6 +18,7 @@ import type {
   TimelineEvent,
   ToolResultEvent,
 } from "@/lib/timeline"
+import { getToolPresentation } from "@/lib/tool-presentation"
 
 // Computed client-side from the live event stream, mirroring the server's
 // `sync_context_usage`, so the indicator updates mid-turn instead of
@@ -57,7 +59,16 @@ export interface SessionTimelineState {
   // `null` until the first `usage_update`; same fallback as `model`.
   usage: SessionUsage | null
   insights: SessionInsights
-  toolStarts: Record<string, { name: string; startedAt: string }>
+  toolStarts: Record<
+    string,
+    {
+      name: string
+      startedAt: string
+      canonical: ToolRef["canonical"]
+      input: unknown
+    }
+  >
+  citationsByTurn: Record<string, CitationItem[]>
   costByTurn: Record<string, number | null>
   subagents: Record<string, SubagentRecord>
   subagentMessages: Record<string, SubagentMessage[]>
@@ -74,6 +85,7 @@ export const initialSessionTimelineState: SessionTimelineState = {
     longestTool: null,
   },
   toolStarts: {},
+  citationsByTurn: {},
   costByTurn: {},
   subagents: {},
   subagentMessages: {},
@@ -359,10 +371,151 @@ const DECISION_TO_STATUS: Record<string, PermissionEvent["status"]> = {
   deny: "denied",
 }
 
+const URL_PATTERN = /https?:\/\/[^\s<>"')\]]+/gi
+const CITATION_URL_KEYS = ["url", "uri", "link", "href", "source_url", "sourceUrl"]
+const CITATION_TITLE_KEYS = [
+  "title",
+  "name",
+  "headline",
+  "site_name",
+  "siteName",
+]
+
+function normalizeCitationUrl(value: string): string | null {
+  const cleaned = value.trim().replace(/[),.;:!?]+$/, "")
+  try {
+    const url = new URL(cleaned)
+    return url.protocol === "http:" || url.protocol === "https:"
+      ? url.toString()
+      : null
+  } catch {
+    return null
+  }
+}
+
+function citationDomain(url: string): string | undefined {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "") || undefined
+  } catch {
+    return undefined
+  }
+}
+
+function citationTitle(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined
+  const title = value.trim()
+  return title && title.length <= 160 ? title : undefined
+}
+
+function mergeCitations(
+  current: CitationItem[] = [],
+  additions: CitationItem[] = []
+): CitationItem[] {
+  const merged = new Map(current.map((citation) => [citation.id, citation]))
+  for (const citation of additions) {
+    if (!merged.has(citation.id)) merged.set(citation.id, citation)
+  }
+  return [...merged.values()]
+}
+
+function extractCitationItems(value: unknown): CitationItem[] {
+  const citations: CitationItem[] = []
+  const seen = new Set<unknown>()
+
+  const add = (rawUrl: string, title?: string) => {
+    const url = normalizeCitationUrl(rawUrl)
+    if (!url) return
+    citations.push({
+      id: url,
+      title: title ?? citationDomain(url) ?? url,
+      domain: citationDomain(url),
+      url,
+    })
+  }
+
+  const visit = (candidate: unknown, fallbackTitle?: string) => {
+    if (typeof candidate === "string") {
+      for (const match of candidate.matchAll(URL_PATTERN)) {
+        add(match[0], fallbackTitle)
+      }
+      return
+    }
+    if (!candidate || typeof candidate !== "object") return
+    if (seen.has(candidate)) return
+    seen.add(candidate)
+
+    if (Array.isArray(candidate)) {
+      for (const item of candidate) visit(item, fallbackTitle)
+      return
+    }
+
+    const record = candidate as Record<string, unknown>
+    const title =
+      CITATION_TITLE_KEYS.map((key) => citationTitle(record[key])).find(
+        Boolean
+      ) ?? fallbackTitle
+    for (const key of CITATION_URL_KEYS) {
+      if (typeof record[key] === "string") add(record[key], title)
+    }
+    for (const [key, child] of Object.entries(record)) {
+      if (CITATION_URL_KEYS.includes(key)) continue
+      visit(child, title)
+    }
+  }
+
+  visit(value)
+  return mergeCitations([], citations)
+}
+
+function citationItemsFromTool(
+  tool: {
+    canonical: ToolRef["canonical"]
+    nativeName: string
+  },
+  input: unknown,
+  output: ToolOutput
+): CitationItem[] {
+  const nativeName = tool.nativeName.toLowerCase()
+  const isLookup =
+    tool.canonical === "search" ||
+    tool.canonical === "web_fetch" ||
+    nativeName.includes("websearch") ||
+    nativeName.includes("web_search") ||
+    nativeName.includes("webfetch") ||
+    nativeName.includes("web_fetch")
+  if (!isLookup) return []
+
+  const outputValue =
+    output.kind === "json"
+      ? output.value
+      : output.kind === "text"
+        ? output.text
+        : output.diff
+  if (tool.canonical === "web_fetch") return extractCitationItems(input)
+
+  return mergeCitations(
+    extractCitationItems(input),
+    extractCitationItems(outputValue)
+  )
+}
+
+function withTurnCitations(
+  events: TimelineEvent[],
+  turn: string,
+  citations: CitationItem[]
+): TimelineEvent[] {
+  return events.map((event) =>
+    event.kind === "assistant_text" && event.turn === turn
+      ? { ...event, sources: mergeCitations(event.sources, citations) }
+      : event
+  )
+}
+
 function applyEvent(
   events: TimelineEvent[],
   event: SessionEvent,
-  isLive: boolean
+  isLive: boolean,
+  citationsByTurn: Record<string, CitationItem[]>
 ): TimelineEvent[] {
   switch (event.type) {
     case "session_init":
@@ -392,6 +545,9 @@ function applyEvent(
         text:
           (existing?.kind === "assistant_text" ? existing.text : "") +
           event.text,
+        sources:
+          citationsByTurn[event.turn] ??
+          (existing?.kind === "assistant_text" ? existing.sources : undefined),
         ts: event.ts,
         turn: event.turn,
         live:
@@ -406,15 +562,19 @@ function applyEvent(
       }))
 
     case "tool_call_requested":
-      return upsert(dropThinking(events), event.call_id, () => ({
-        id: event.call_id,
-        kind: "tool_result",
-        tool: event.tool.native_name,
-        title: event.tool.native_name,
-        status: "running",
-        resultKind: toolResultKind(event.tool.canonical),
-        output: "",
-      }))
+      {
+        const presentation = getToolPresentation(event.tool)
+        return upsert(dropThinking(events), event.call_id, () => ({
+          id: event.call_id,
+          kind: "tool_result",
+          tool: event.tool.native_name,
+          title: presentation.label,
+          iconName: presentation.icon,
+          status: "running",
+          resultKind: toolResultKind(event.tool.canonical),
+          output: "",
+        }))
+      }
 
     case "tool_call_completed":
       return upsert(events, event.call_id, (existing) => {
@@ -426,6 +586,7 @@ function applyEvent(
                 kind: "tool_result",
                 tool: "tool",
                 title: "Tool call",
+                iconName: "custom",
                 status: "running",
                 resultKind: "custom",
                 output: "",
@@ -499,7 +660,39 @@ export function sessionTimelineReducer(
 
     case "apply_event": {
       const event = action.event
-      const events = applyEvent(state.events, event, action.isLive)
+      const startedTool =
+        event.type === "tool_call_completed"
+          ? state.toolStarts[event.call_id]
+          : undefined
+      const citations =
+        event.type === "tool_call_completed" && startedTool
+          ? citationItemsFromTool(
+              {
+                canonical: startedTool.canonical,
+                nativeName: startedTool.name,
+              },
+              startedTool.input,
+              event.output
+            )
+          : []
+      const citationsByTurn = citations.length
+        ? {
+            ...state.citationsByTurn,
+            [event.turn]: mergeCitations(
+              state.citationsByTurn[event.turn],
+              citations
+            ),
+          }
+        : state.citationsByTurn
+      let events = applyEvent(
+        state.events,
+        event,
+        action.isLive,
+        citationsByTurn
+      )
+      if (citations.length) {
+        events = withTurnCitations(events, event.turn, citations)
+      }
       const subagents = applyMentionedSubagentNames(
         applySubagentEvent(state.subagents, event),
         events
@@ -521,6 +714,8 @@ export function sessionTimelineReducer(
         toolStarts[event.call_id] = {
           name: event.tool.native_name,
           startedAt: event.ts,
+          canonical: event.tool.canonical,
+          input: event.input,
         }
       } else if (event.type === "tool_call_completed") {
         const started = toolStarts[event.call_id]
@@ -574,6 +769,7 @@ export function sessionTimelineReducer(
         usage,
         insights,
         toolStarts,
+        citationsByTurn,
         costByTurn,
         subagents,
         subagentMessages,

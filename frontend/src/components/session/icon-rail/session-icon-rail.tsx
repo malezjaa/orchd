@@ -166,7 +166,7 @@ export function SessionIconRail({
   rootPath: string | null
   insights?: SessionInsightsInput | null
 }) {
-  const [active, setActive] = useState<string | null>("files")
+  const [active, setActive] = useState<string | null>(null)
   const [width, setWidthState] = useState(getStoredPanelWidth)
   const [resizing, setResizing] = useState(false)
   const reduce = useReducedMotion() ?? false

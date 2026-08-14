@@ -157,7 +157,7 @@ function CitationRow({
     </>
   )
   const className =
-    "group/citation flex items-center gap-2 rounded-md px-1.5 py-1 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    "group/citation flex items-center gap-2 rounded-md px-1.5 py-1 transition-colors outline-none hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring"
   const id = citationTargetId(idPrefix, citation.id)
 
   return citation.url ? (

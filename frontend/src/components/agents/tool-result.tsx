@@ -31,19 +31,22 @@ import {
 import { ActionSwapRollText } from "@/components/motion/action-swap-roll"
 import { AgentDisclosure } from "@/components/agents/agent-disclosure"
 import { SPRING_PRESS, SPRING_SWAP } from "@/lib/ease"
+import type { ToolIconName } from "@/lib/tool-presentation"
+import { ToolIcon } from "@/components/agents/tool-icon"
 import { cn } from "@/lib/utils"
 
 export type ToolResultStatus = "running" | "success" | "error" | "cancelled"
 export type ToolResultKind = "terminal" | "request" | "custom"
 
 export interface ToolResultProps {
-  tool: ReactNode
+  tool?: ReactNode
   title: ReactNode
   children: ReactNode
   status?: ToolResultStatus
   kind?: ToolResultKind
   meta?: ReactNode
   icon?: ReactNode
+  iconName?: ToolIconName
   open?: boolean
   defaultOpen?: boolean
   onOpenChange?: (open: boolean) => void
@@ -85,7 +88,14 @@ function getStatusClass(status: ToolResultStatus) {
   return "text-muted-foreground/70"
 }
 
-function KindIcon({ kind }: { kind: ToolResultKind }) {
+function KindIcon({
+  kind,
+  iconName,
+}: {
+  kind: ToolResultKind
+  iconName?: ToolIconName
+}) {
+  if (iconName) return <ToolIcon name={iconName} />
   if (kind === "terminal") return <SquareTerminal className="size-4" />
   if (kind === "request") return <Braces className="size-4" />
   return <Wrench className="size-4" />
@@ -155,6 +165,7 @@ export function ToolResult({
   children,
   status = "running",
   kind = "custom",
+  iconName,
   meta,
   icon,
   open,
@@ -258,7 +269,7 @@ export function ToolResult({
           aria-hidden="true"
           className="grid size-4 shrink-0 place-items-center text-muted-foreground"
         >
-          {icon ?? <KindIcon kind={kind} />}
+          {icon ?? <KindIcon kind={kind} iconName={iconName} />}
         </span>
         <span className="flex min-w-0 flex-1 items-baseline gap-2">
           <span className="min-w-0 truncate font-medium text-foreground/90">
@@ -269,9 +280,11 @@ export function ToolResult({
               <ActionSwapRollText value={metaKey}>{meta}</ActionSwapRollText>
             </span>
           ) : null}
-          <span className="min-w-0 truncate font-mono text-[11px] text-muted-foreground/55">
-            <ActionSwapRollText value={toolKey}>{tool}</ActionSwapRollText>
-          </span>
+          {tool != null ? (
+            <span className="min-w-0 truncate font-mono text-[11px] text-muted-foreground/55">
+              <ActionSwapRollText value={toolKey}>{tool}</ActionSwapRollText>
+            </span>
+          ) : null}
         </span>
         <span
           className={cn(

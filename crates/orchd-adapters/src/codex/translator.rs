@@ -589,6 +589,14 @@ impl CodexTranslator {
         CanonicalTool::Mcp,
         item.get("arguments").cloned().unwrap_or(Value::Null),
       ),
+      "webSearch" => (
+        "webSearch",
+        CanonicalTool::Search,
+        json!({
+          "query": item.get("query").cloned().unwrap_or(Value::Null),
+          "action": item.get("action").cloned().unwrap_or(Value::Null),
+        }),
+      ),
       _ => return Ok(vec![]),
     };
     let call_id = ToolCallId::new();
@@ -639,6 +647,9 @@ impl CodexTranslator {
       Some("mcpToolCall") => {
         ToolOutput::Json { value: item.get("result").cloned().unwrap_or(Value::Null) }
       }
+      Some("webSearch") => ToolOutput::Json {
+        value: item.get("results").cloned().unwrap_or_else(|| item.clone()),
+      },
       _ => return Ok(vec![]),
     };
     Ok(vec![EventPayload::ToolCallCompleted {
@@ -1396,6 +1407,51 @@ mod tests {
         output_tokens: 5,
         ..
       }
+    ));
+  }
+
+  #[test]
+  fn translates_web_search_items() {
+    let mut translator = translator();
+    let started = translator
+      .decode(frame(json!({
+        "method": "item/started",
+        "params": { "item": {
+          "type": "webSearch",
+          "id": "search-1",
+          "query": "latest Rust release"
+        }}
+      })))
+      .unwrap();
+    assert!(matches!(
+      &started[0],
+      EventPayload::ToolCallRequested { tool, input, .. }
+        if tool.canonical == CanonicalTool::Search
+          && input["query"] == "latest Rust release"
+    ));
+
+    let completed = translator
+      .decode(frame(json!({
+        "method": "item/completed",
+        "params": { "item": {
+          "type": "webSearch",
+          "id": "search-1",
+          "query": "latest Rust release",
+          "results": [{
+            "title": "Rust releases",
+            "url": "https://blog.rust-lang.org/releases/"
+          }],
+          "status": "completed"
+        }}
+      })))
+      .unwrap();
+    assert!(matches!(
+      &completed[0],
+      EventPayload::ToolCallCompleted {
+        output: ToolOutput::Json { value },
+        is_error: false,
+        ..
+      } if value[0]["url"] == "https://blog.rust-lang.org/releases/"
     ));
   }
 

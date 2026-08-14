@@ -164,6 +164,7 @@ export function TimelineItem({
               copyText={event.text}
               timestamp={event.ts}
               align="start"
+              className={event.sources?.length ? "mt-2" : undefined}
             />
           ) : null}
         </div>
@@ -212,8 +213,9 @@ export function TimelineItem({
     case "tool_result":
       return (
         <ToolResult
-          tool={event.tool}
+          tool={event.title === event.tool ? event.tool : undefined}
           title={event.title}
+          iconName={event.iconName}
           status={event.status}
           kind={event.resultKind}
           meta={event.meta}
